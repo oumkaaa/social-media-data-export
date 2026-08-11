@@ -18,7 +18,9 @@ import time
 import os
 import glob
 import argparse
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # 实时输出刷新
 sys.stdout.reconfigure(line_buffering=True)
@@ -44,19 +46,71 @@ def run_cmd(cmd, wait=0):
         time.sleep(wait)
     return result.stdout.strip()
 
-def wait_for_download(timeout=DOWNLOAD_TIMEOUT):
+def set_download_directory(target_dir):
     """
-    等待 Chrome 下载完成，返回下载的文件路径
-    使用 opencli 的 wait download 命令
+    通过 CDP 设置 Chrome 下载目录
+    返回是否设置成功
     """
-    result = run_cmd(f'opencli browser xhs wait download --timeout {timeout * 1000}')
+    # 使用 opencli eval 执行 JS，通过 CDP 设置下载行为
+    js_code = f"""
+    (async () => {{
+        try {{
+            const response = await fetch('http://localhost:9222/json/version');
+            const data = await response.json();
+            const webSocketUrl = data.webSocketDebuggerUrl;
+            
+            // 通过 WebSocket 发送 CDP 命令
+            const ws = new WebSocket(webSocketUrl);
+            await new Promise(resolve => ws.onopen = resolve);
+            
+            ws.send(JSON.stringify({{
+                id: 1,
+                method: 'Page.setDownloadBehavior',
+                params: {{
+                    behavior: 'allow',
+                    downloadPath: '{target_dir}'
+                }}
+            }}));
+            
+            const response = await new Promise(resolve => {{
+                ws.onmessage = (event) => resolve(JSON.parse(event.data));
+            }});
+            
+            ws.close();
+            return response.id === 1 ? 'success' : 'failed';
+        }} catch (e) {{
+            return 'error: ' + e.message;
+        }}
+    }})();
+    """
     
-    # 解析返回的 JSON，提取下载的文件路径
-    if '"downloaded": true' in result or '"state": "completed"' in result:
-        # 从 Downloads 目录获取最新文件
-        files = glob.glob(os.path.join(DOWNLOAD_DIR, "*.xlsx"))
-        if files:
-            return max(files, key=os.path.getmtime)
+    result = run_cmd(f'opencli browser xhs eval "{js_code}"')
+    return 'success' in result
+
+def wait_for_download_in_dir(target_dir, timeout=DOWNLOAD_TIMEOUT):
+    """
+    等待文件下载到指定目录
+    返回下载的文件路径
+    """
+    start_time = time.time()
+    initial_files = set(glob.glob(os.path.join(target_dir, "*.xlsx")))
+    
+    while time.time() - start_time < timeout:
+        current_files = set(glob.glob(os.path.join(target_dir, "*.xlsx")))
+        new_files = current_files - initial_files
+        
+        if new_files:
+            # 等待文件写入完成
+            time.sleep(2)
+            new_file = max(new_files, key=lambda f: os.path.getmtime(f))
+            size1 = os.path.getsize(new_file)
+            time.sleep(1)
+            size2 = os.path.getsize(new_file)
+            
+            if size1 == size2 and size1 > 0:
+                return new_file
+        
+        time.sleep(1)
     
     return None
 
@@ -96,8 +150,13 @@ def create_output_dirs(last_friday, this_thursday, channels, base_output_dir):
     return dirs, date_str
 
 def export_xiaohongshu_account(xhs_dir, period, friday_str, thursday_str):
-    print(" 开始导出小红书 - 账号概览数据...", flush=True)
+    print("📊 开始导出小红书 - 账号概览数据...", flush=True)
     print(f"  日期范围：{friday_str} 至 {thursday_str} ({period})", flush=True)
+    
+    # 设置下载目录到当前平台文件夹
+    print(f"  → 设置下载目录：{xhs_dir}", flush=True)
+    set_download_directory(xhs_dir)
+    time.sleep(1)
     
     run_cmd('opencli browser xhs open "https://creator.xiaohongshu.com/statistics/account/v2"', wait=5)
     
@@ -124,24 +183,31 @@ def export_xiaohongshu_account(xhs_dir, period, friday_str, thursday_str):
         
         run_cmd('opencli browser xhs click "div.export"')
         
-        # 等待下载完成
-        new_file = wait_for_download()
+        # 等待文件下载到目标目录
+        new_file = wait_for_download_in_dir(xhs_dir)
         
         if new_file:
+            # 重命名为标准文件名
             dest = os.path.join(xhs_dir, file)
-            subprocess.run(["cp", new_file, dest])
+            if new_file != dest:
+                os.rename(new_file, dest)
             size = os.path.getsize(dest)
             print(f"    ✅ 已保存：{file} ({size} bytes)", flush=True)
             success_count += 1
         else:
-            print(f"     下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
+            print(f"    ❌ 下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
     
     print(f"  小红书账号概览：{success_count}/4 成功", flush=True)
     return success_count == 4
 
 def export_xiaohongshu_content(xhs_dir, period, friday_str, thursday_str):
-    print("📊 开始导出小红书 - 内容分析数据...", flush=True)
+    print(" 开始导出小红书 - 内容分析数据...", flush=True)
     print(f"  日期范围：{friday_str} 至 {thursday_str} ({period})", flush=True)
+    
+    # 设置下载目录
+    print(f"  → 设置下载目录：{xhs_dir}", flush=True)
+    set_download_directory(xhs_dir)
+    time.sleep(1)
     
     run_cmd('opencli browser xhs open "https://creator.xiaohongshu.com/statistics/data-analysis"', wait=5)
     
@@ -153,11 +219,12 @@ def export_xiaohongshu_content(xhs_dir, period, friday_str, thursday_str):
     
     run_cmd('opencli browser xhs click "button.download-btn"')
     
-    new_file = wait_for_download()
+    new_file = wait_for_download_in_dir(xhs_dir)
     
     if new_file:
         dest = os.path.join(xhs_dir, "内容分析_笔记明细.xlsx")
-        subprocess.run(["cp", new_file, dest])
+        if new_file != dest:
+            os.rename(new_file, dest)
         size = os.path.getsize(dest)
         print(f"    ✅ 已保存：内容分析_笔记明细.xlsx ({size} bytes)", flush=True)
         return True
@@ -168,6 +235,11 @@ def export_xiaohongshu_content(xhs_dir, period, friday_str, thursday_str):
 def export_douyin(douyin_dir, period, friday_str, thursday_str):
     print("📊 开始导出抖音数据...", flush=True)
     print(f"  日期范围：{friday_str} 至 {thursday_str} ({period})", flush=True)
+    
+    # 设置下载目录
+    print(f"  → 设置下载目录：{douyin_dir}", flush=True)
+    set_download_directory(douyin_dir)
+    time.sleep(1)
     
     run_cmd('opencli browser xhs open "https://creator.douyin.com/creator-micro/data-center/operation"', wait=8)
     
@@ -193,10 +265,11 @@ def export_douyin(douyin_dir, period, friday_str, thursday_str):
     """
     run_cmd(f'opencli browser xhs eval "{js_code}"')
     
-    new_file = wait_for_download()
+    new_file = wait_for_download_in_dir(douyin_dir)
     if new_file:
         dest = os.path.join(douyin_dir, "作品数据.xlsx")
-        subprocess.run(["cp", new_file, dest])
+        if new_file != dest:
+            os.rename(new_file, dest)
         size = os.path.getsize(dest)
         print(f"    ✅ 已保存：作品数据.xlsx ({size} bytes)", flush=True)
         success_count += 1
@@ -214,15 +287,16 @@ def export_douyin(douyin_dir, period, friday_str, thursday_str):
     """
     run_cmd(f'opencli browser xhs eval "{js_code}"')
     
-    new_file = wait_for_download()
+    new_file = wait_for_download_in_dir(douyin_dir)
     if new_file:
         dest = os.path.join(douyin_dir, "粉丝数据.xlsx")
-        subprocess.run(["cp", new_file, dest])
+        if new_file != dest:
+            os.rename(new_file, dest)
         size = os.path.getsize(dest)
         print(f"    ✅ 已保存：粉丝数据.xlsx ({size} bytes)", flush=True)
         success_count += 1
     else:
-        print(f"     下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
+        print(f"    ❌ 下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
     
     print(f"  抖音数据：{success_count}/2 成功", flush=True)
     return success_count == 2
@@ -255,7 +329,7 @@ def main():
     
     print(f"📅 数据周期：{friday_str}（上周五）至 {thursday_str}（这周四）", flush=True)
     print(f"📁 导出渠道：{args.channels}", flush=True)
-    print(f"📁 输出目录：{args.output}", flush=True)
+    print(f" 输出目录：{args.output}", flush=True)
     print(flush=True)
     
     results = {}
@@ -284,7 +358,7 @@ def main():
         print("✅ 数据导出完成！", flush=True)
     print("=" * 50, flush=True)
     print(flush=True)
-    print(" 文件列表：", flush=True)
+    print("📁 文件列表：", flush=True)
     
     for platform, dir_path in dirs.items():
         print(f"\n【{platform}_{date_str}】", flush=True)
@@ -298,7 +372,7 @@ def main():
     
     print(flush=True)
     print(f"📅 数据周期：{friday_str}（上周五）至 {thursday_str}（这周四）", flush=True)
-    print(f"📂 保存位置：{args.output}", flush=True)
+    print(f" 保存位置：{args.output}", flush=True)
 
 if __name__ == "__main__":
     main()
