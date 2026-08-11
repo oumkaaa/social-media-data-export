@@ -18,9 +18,7 @@ import time
 import os
 import glob
 import argparse
-import json
 from datetime import datetime, timedelta
-from pathlib import Path
 
 # 实时输出刷新
 sys.stdout.reconfigure(line_buffering=True)
@@ -46,73 +44,48 @@ def run_cmd(cmd, wait=0):
         time.sleep(wait)
     return result.stdout.strip()
 
-def set_download_directory(target_dir):
+def get_downloads_snapshot():
     """
-    通过 CDP 设置 Chrome 下载目录
-    返回是否设置成功
+    获取 Downloads 目录中所有 xlsx 文件的快照
+    返回 {文件名: 修改时间} 字典
     """
-    # 使用 opencli eval 执行 JS，通过 CDP 设置下载行为
-    js_code = f"""
-    (async () => {{
-        try {{
-            const response = await fetch('http://localhost:9222/json/version');
-            const data = await response.json();
-            const webSocketUrl = data.webSocketDebuggerUrl;
-            
-            // 通过 WebSocket 发送 CDP 命令
-            const ws = new WebSocket(webSocketUrl);
-            await new Promise(resolve => ws.onopen = resolve);
-            
-            ws.send(JSON.stringify({{
-                id: 1,
-                method: 'Page.setDownloadBehavior',
-                params: {{
-                    behavior: 'allow',
-                    downloadPath: '{target_dir}'
-                }}
-            }}));
-            
-            const response = await new Promise(resolve => {{
-                ws.onmessage = (event) => resolve(JSON.parse(event.data));
-            }});
-            
-            ws.close();
-            return response.id === 1 ? 'success' : 'failed';
-        }} catch (e) {{
-            return 'error: ' + e.message;
-        }}
-    }})();
-    """
-    
-    result = run_cmd(f'opencli browser xhs eval "{js_code}"')
-    return 'success' in result
+    files = glob.glob(os.path.join(DOWNLOAD_DIR, "*.xlsx"))
+    return {os.path.basename(f): os.path.getmtime(f) for f in files}
 
-def wait_for_download_in_dir(target_dir, timeout=DOWNLOAD_TIMEOUT):
+def wait_for_new_download(before_snapshot, timeout=DOWNLOAD_TIMEOUT):
     """
-    等待文件下载到指定目录
-    返回下载的文件路径
+    等待新的 xlsx 文件下载到 Downloads
+    返回新文件路径，如果超时返回 None
     """
     start_time = time.time()
-    initial_files = set(glob.glob(os.path.join(target_dir, "*.xlsx")))
-    
     while time.time() - start_time < timeout:
-        current_files = set(glob.glob(os.path.join(target_dir, "*.xlsx")))
-        new_files = current_files - initial_files
-        
-        if new_files:
-            # 等待文件写入完成
-            time.sleep(2)
-            new_file = max(new_files, key=lambda f: os.path.getmtime(f))
-            size1 = os.path.getsize(new_file)
-            time.sleep(1)
-            size2 = os.path.getsize(new_file)
-            
-            if size1 == size2 and size1 > 0:
-                return new_file
-        
+        files = glob.glob(os.path.join(DOWNLOAD_DIR, "*.xlsx"))
+        for f in files:
+            fname = os.path.basename(f)
+            # 如果文件名不在快照中，或者修改时间更新了，说明是新文件
+            if fname not in before_snapshot or os.path.getmtime(f) > before_snapshot[fname]:
+                # 等待文件写入完成（大小稳定）
+                time.sleep(2)
+                size1 = os.path.getsize(f)
+                time.sleep(1)
+                size2 = os.path.getsize(f)
+                if size1 == size2 and size1 > 0:
+                    return f
         time.sleep(1)
-    
     return None
+
+def move_and_cleanup(source_file, dest_path):
+    """
+    移动文件到目标位置，并清理 Downloads 中的原始文件
+    """
+    # 移动文件
+    subprocess.run(["mv", source_file, dest_path])
+    
+    # 如果移动后源文件还存在（比如跨文件系统），则删除
+    if os.path.exists(source_file):
+        os.remove(source_file)
+    
+    return os.path.exists(dest_path)
 
 def calculate_date_range(period, custom_start=None, custom_end=None):
     today = datetime.now()
@@ -126,7 +99,7 @@ def calculate_date_range(period, custom_start=None, custom_end=None):
         this_thursday = today - timedelta(days=dow + 4)
     elif period == 'custom':
         if not custom_start or not custom_end:
-            print(" 自定义日期需要提供 --start 和 --end 参数", flush=True)
+            print("❌ 自定义日期需要提供 --start 和 --end 参数", flush=True)
             sys.exit(1)
         last_friday = datetime.strptime(custom_start, '%Y-%m-%d')
         this_thursday = datetime.strptime(custom_end, '%Y-%m-%d')
@@ -153,11 +126,6 @@ def export_xiaohongshu_account(xhs_dir, period, friday_str, thursday_str):
     print("📊 开始导出小红书 - 账号概览数据...", flush=True)
     print(f"  日期范围：{friday_str} 至 {thursday_str} ({period})", flush=True)
     
-    # 设置下载目录到当前平台文件夹
-    print(f"  → 设置下载目录：{xhs_dir}", flush=True)
-    set_download_directory(xhs_dir)
-    time.sleep(1)
-    
     run_cmd('opencli browser xhs open "https://creator.xiaohongshu.com/statistics/account/v2"', wait=5)
     
     # 选择视图
@@ -177,23 +145,27 @@ def export_xiaohongshu_account(xhs_dir, period, friday_str, thursday_str):
     for i, (tab, file) in enumerate(zip(tabs, files)):
         print(f"  → 导出 {tab}...", flush=True)
         
+        # 记录点击前的 Downloads 快照
+        before_snapshot = get_downloads_snapshot()
+        
         if i > 0:
             run_cmd(f'opencli browser xhs eval "var tabs = Array.from(document.querySelectorAll(\'.d-tabs-header\')).filter(el => el.textContent.includes(\'数据\')); tabs[{i}].click();"')
             time.sleep(3)
         
         run_cmd('opencli browser xhs click "div.export"')
         
-        # 等待文件下载到目标目录
-        new_file = wait_for_download_in_dir(xhs_dir)
+        # 等待新文件下载
+        new_file = wait_for_new_download(before_snapshot)
         
         if new_file:
-            # 重命名为标准文件名
             dest = os.path.join(xhs_dir, file)
-            if new_file != dest:
-                os.rename(new_file, dest)
-            size = os.path.getsize(dest)
-            print(f"    ✅ 已保存：{file} ({size} bytes)", flush=True)
-            success_count += 1
+            moved = move_and_cleanup(new_file, dest)
+            if moved:
+                size = os.path.getsize(dest)
+                print(f"    ✅ 已保存：{file} ({size} bytes)", flush=True)
+                success_count += 1
+            else:
+                print(f"    ️ 文件移动失败", flush=True)
         else:
             print(f"    ❌ 下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
     
@@ -201,13 +173,8 @@ def export_xiaohongshu_account(xhs_dir, period, friday_str, thursday_str):
     return success_count == 4
 
 def export_xiaohongshu_content(xhs_dir, period, friday_str, thursday_str):
-    print(" 开始导出小红书 - 内容分析数据...", flush=True)
+    print("📊 开始导出小红书 - 内容分析数据...", flush=True)
     print(f"  日期范围：{friday_str} 至 {thursday_str} ({period})", flush=True)
-    
-    # 设置下载目录
-    print(f"  → 设置下载目录：{xhs_dir}", flush=True)
-    set_download_directory(xhs_dir)
-    time.sleep(1)
     
     run_cmd('opencli browser xhs open "https://creator.xiaohongshu.com/statistics/data-analysis"', wait=5)
     
@@ -217,17 +184,23 @@ def export_xiaohongshu_content(xhs_dir, period, friday_str, thursday_str):
     run_cmd(f'opencli browser xhs fill "input[placeholder=\'结束时间\']" "{thursday_str}"')
     time.sleep(2)
     
+    # 记录点击前的 Downloads 快照
+    before_snapshot = get_downloads_snapshot()
+    
     run_cmd('opencli browser xhs click "button.download-btn"')
     
-    new_file = wait_for_download_in_dir(xhs_dir)
+    new_file = wait_for_new_download(before_snapshot)
     
     if new_file:
         dest = os.path.join(xhs_dir, "内容分析_笔记明细.xlsx")
-        if new_file != dest:
-            os.rename(new_file, dest)
-        size = os.path.getsize(dest)
-        print(f"    ✅ 已保存：内容分析_笔记明细.xlsx ({size} bytes)", flush=True)
-        return True
+        moved = move_and_cleanup(new_file, dest)
+        if moved:
+            size = os.path.getsize(dest)
+            print(f"    ✅ 已保存：内容分析_笔记明细.xlsx ({size} bytes)", flush=True)
+            return True
+        else:
+            print(f"    ⚠️ 文件移动失败", flush=True)
+            return False
     else:
         print(f"    ❌ 下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
         return False
@@ -235,11 +208,6 @@ def export_xiaohongshu_content(xhs_dir, period, friday_str, thursday_str):
 def export_douyin(douyin_dir, period, friday_str, thursday_str):
     print("📊 开始导出抖音数据...", flush=True)
     print(f"  日期范围：{friday_str} 至 {thursday_str} ({period})", flush=True)
-    
-    # 设置下载目录
-    print(f"  → 设置下载目录：{douyin_dir}", flush=True)
-    set_download_directory(douyin_dir)
-    time.sleep(1)
     
     run_cmd('opencli browser xhs open "https://creator.douyin.com/creator-micro/data-center/operation"', wait=8)
     
@@ -256,6 +224,8 @@ def export_douyin(douyin_dir, period, friday_str, thursday_str):
     
     # 作品数据
     print("  → 导出作品数据...", flush=True)
+    before_snapshot = get_downloads_snapshot()
+    
     js_code = """
     var container = document.querySelector('[id^=garfish_app_for_douyin_creator_pc_data_center]');
     if (container) {
@@ -265,19 +235,23 @@ def export_douyin(douyin_dir, period, friday_str, thursday_str):
     """
     run_cmd(f'opencli browser xhs eval "{js_code}"')
     
-    new_file = wait_for_download_in_dir(douyin_dir)
+    new_file = wait_for_new_download(before_snapshot)
     if new_file:
         dest = os.path.join(douyin_dir, "作品数据.xlsx")
-        if new_file != dest:
-            os.rename(new_file, dest)
-        size = os.path.getsize(dest)
-        print(f"    ✅ 已保存：作品数据.xlsx ({size} bytes)", flush=True)
-        success_count += 1
+        moved = move_and_cleanup(new_file, dest)
+        if moved:
+            size = os.path.getsize(dest)
+            print(f"    ✅ 已保存：作品数据.xlsx ({size} bytes)", flush=True)
+            success_count += 1
+        else:
+            print(f"    ⚠️ 文件移动失败", flush=True)
     else:
         print(f"    ❌ 下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
     
     # 粉丝数据
     print("  → 导出粉丝数据...", flush=True)
+    before_snapshot = get_downloads_snapshot()
+    
     js_code = """
     var container = document.querySelector('[id^=garfish_app_for_douyin_creator_pc_data_center]');
     if (container) {
@@ -287,14 +261,16 @@ def export_douyin(douyin_dir, period, friday_str, thursday_str):
     """
     run_cmd(f'opencli browser xhs eval "{js_code}"')
     
-    new_file = wait_for_download_in_dir(douyin_dir)
+    new_file = wait_for_new_download(before_snapshot)
     if new_file:
         dest = os.path.join(douyin_dir, "粉丝数据.xlsx")
-        if new_file != dest:
-            os.rename(new_file, dest)
-        size = os.path.getsize(dest)
-        print(f"    ✅ 已保存：粉丝数据.xlsx ({size} bytes)", flush=True)
-        success_count += 1
+        moved = move_and_cleanup(new_file, dest)
+        if moved:
+            size = os.path.getsize(dest)
+            print(f"    ✅ 已保存：粉丝数据.xlsx ({size} bytes)", flush=True)
+            success_count += 1
+        else:
+            print(f"    ⚠️ 文件移动失败", flush=True)
     else:
         print(f"    ❌ 下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
     
@@ -329,7 +305,7 @@ def main():
     
     print(f"📅 数据周期：{friday_str}（上周五）至 {thursday_str}（这周四）", flush=True)
     print(f"📁 导出渠道：{args.channels}", flush=True)
-    print(f" 输出目录：{args.output}", flush=True)
+    print(f"📁 输出目录：{args.output}", flush=True)
     print(flush=True)
     
     results = {}
@@ -372,7 +348,7 @@ def main():
     
     print(flush=True)
     print(f"📅 数据周期：{friday_str}（上周五）至 {thursday_str}（这周四）", flush=True)
-    print(f" 保存位置：{args.output}", flush=True)
+    print(f"📂 保存位置：{args.output}", flush=True)
 
 if __name__ == "__main__":
     main()
