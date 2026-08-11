@@ -1,0 +1,213 @@
+---
+name: social-media-data-export
+description: 社交媒体平台数据导出自动化。当用户需要从小红书或抖音创作者中心导出运营数据时使用。支持小红书账号概览（观看/互动/涨粉/发布数据）、内容分析（笔记明细），以及抖音作品数据和粉丝数据的批量导出。
+---
+
+# 社交媒体数据导出
+
+## 任务背景
+
+为市场营销团队定期从各平台创作者中心导出运营数据，用于数据分析和报告制作。
+
+## 技能说明
+
+本技能提供自动化脚本，帮助团队成员快速从社交媒体平台创作者中心导出运营数据。
+
+**支持平台**：
+- 小红书：账号概览（观看/互动/涨粉/发布数据）+ 内容分析（笔记明细）
+- 抖音：作品数据 + 粉丝数据
+
+**输出位置**：用户本地 `~/Documents/社交媒体数据/` 目录，按平台 + 日期范围组织文件夹
+
+## 用户交互流程
+
+### 步骤 1：引导登录
+
+**小红书**
+- 登录链接：`https://creator.xiaohongshu.com/login`
+- 验证命令：`opencli xiaohongshu whoami`
+- 未登录时：提示用户打开链接完成扫码登录
+
+**抖音**
+- 登录链接：`https://creator.douyin.com/login`
+- 验证方式：打开数据中心页面检查是否跳转到登录页
+- 未登录时：提示用户完成登录
+
+### 步骤 2：验证登录态
+
+```bash
+# 小红书验证
+opencli xiaohongshu whoami
+
+# 抖音验证（通过页面检查）
+opencli browser xhs open "https://creator.douyin.com/creator-micro/data-center/operation"
+# 检查页面是否包含登录表单或跳转到登录页
+```
+
+### 步骤 3：表单配置（使用 request_user_input）
+
+使用 `request_user_input` 工具向用户展示配置表单，收集以下信息：
+
+**问题 1：导出渠道**
+- header: "渠道"
+- question: "请选择要导出的平台渠道："
+- options:
+  - label: "全部渠道（小红书 + 抖音）" (Recommended)
+    description: "导出所有平台的数据"
+  - label: "仅小红书"
+    description: "只导出小红书账号概览和内容分析数据"
+  - label: "仅抖音"
+    description: "只导出抖音作品数据和粉丝数据"
+
+**问题 2：日期范围**
+- header: "日期"
+- question: "请选择数据日期范围："
+- options:
+  - label: "本周（上周五 → 这周四）" (Recommended)
+    description: "默认周期，适合每周例行导出"
+  - label: "上周（上上周五 → 上周四）"
+    description: "补导上周数据"
+  - label: "自定义日期范围"
+    description: "手动指定开始和结束日期"
+
+**问题 3：自定义日期（仅当用户选择"自定义"时显示）**
+- header: "开始日期"
+- question: "请输入开始日期（YYYY-MM-DD 格式）："
+- options:
+  - label: "示例：2026-08-01"
+    description: "按此格式输入日期"
+
+- header: "结束日期"
+- question: "请输入结束日期（YYYY-MM-DD 格式）："
+- options:
+  - label: "示例：2026-08-07"
+    description: "按此格式输入日期"
+
+### 步骤 4：构建命令并运行
+
+根据用户选择，构建对应的命令行参数：
+
+| 用户选择 | 命令参数 |
+|---------|---------|
+| 全部渠道 + 本周 | 无参数（默认） |
+| 仅小红书 + 本周 | `--channels xiaohongshu` |
+| 仅抖音 + 本周 | `--channels douyin` |
+| 全部渠道 + 上周 | `--period last-week` |
+| 全部渠道 + 自定义 | `--period custom --start YYYY-MM-DD --end YYYY-MM-DD` |
+
+**完整命令示例**：
+
+```bash
+# 默认：全渠道 + 本周，输出到 ~/Documents/社交媒体数据/
+python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_data.py
+
+# 仅小红书 + 本周
+python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_data.py --channels xiaohongshu
+
+# 仅抖音 + 上周
+python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_data.py --channels douyin --period last-week
+
+# 全渠道 + 自定义日期 + 自定义输出目录
+python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_data.py --period custom --start 2026-08-01 --end 2026-08-07 --output ~/Desktop/数据导出
+```
+
+### 步骤 5：交付文件
+
+脚本执行完成后，输出文件路径列表：
+
+```
+✅ 数据导出完成！
+
+ 文件列表：
+
+【小红书_20260731-0806】
+  - 观看数据.xlsx
+  - 互动数据.xlsx
+  - 涨粉数据.xlsx
+  - 发布数据.xlsx
+  - 内容分析_笔记明细.xlsx
+
+【抖音_20260731-0806】
+  - 作品数据.xlsx
+  - 粉丝数据.xlsx
+
+📅 数据周期：2026-07-31（上周五）至 2026-08-06（这周四）
+📂 保存位置：~/Documents/社交媒体数据/
+```
+
+## 命令行参数说明
+
+| 参数 | 说明 | 选项 | 默认值 |
+|------|------|------|--------|
+| `--channels` | 导出渠道 | `xiaohongshu`, `douyin`, `all` | `all` |
+| `--period` | 日期范围 | `this-week`, `last-week`, `custom` | `this-week` |
+| `--start` | 自定义开始日期 | YYYY-MM-DD | - |
+| `--end` | 自定义结束日期 | YYYY-MM-DD | - |
+| `--output` | 输出目录 | 任意路径 | `~/Documents/社交媒体数据/` |
+
+## 数据源说明
+
+### 小红书 - 账号概览
+- **URL**: `https://creator.xiaohongshu.com/statistics/account/v2`
+- **Tab**: 观看数据、互动数据、涨粉数据、发布数据
+- **周期**: 近 7 日（默认）
+- **按钮**: `div.export`
+
+### 小红书 - 内容分析
+- **URL**: `https://creator.xiaohongshu.com/statistics/data-analysis`
+- **周期**: 上周五 → 这周四（需手动设置）
+- **按钮**: `button.download-btn`
+
+### 抖音 - 作品数据 + 粉丝数据
+- **URL**: `https://creator.douyin.com/creator-micro/data-center/operation`
+- **架构**: 微前端（Garfish），按钮在动态 ID 容器内
+- **按钮**: 容器内 `button` 元素中 `textContent.includes('导出')` 的按钮
+
+## 验收标准
+
+导出完成后，检查以下内容：
+
+1. **文件夹结构**：
+   - `~/Documents/社交媒体数据/小红书_YYYYMMDD-MMDD/`
+   - `~/Documents/社交媒体数据/抖音_YYYYMMDD-MMDD/`
+
+2. **文件完整性**：
+   - 小红书账号概览：5 个文件（观看/互动/涨粉/发布/内容分析）
+   - 抖音：2 个文件（作品数据/粉丝数据）
+
+3. **数据有效性**：
+   - 所有 xlsx 文件大小 > 0
+   - 打开文件确认包含实际数据（非空表）
+
+4. **日期范围**：
+   - 文件名中的日期与用户选择的周期一致
+
+## 注意事项
+
+1. **浏览器连接**: 确保 opencli daemon 运行且 Chrome 扩展已连接
+2. **下载等待**: 每次点击导出后需等待 8-10 秒
+3. **Tab 切换**: 切换 tab 后需等待 3 秒让数据加载
+4. **文件重名**: 下载后立即重命名，避免系统自动添加 `(1)` 后缀
+5. **日期设置**: 使用 `opencli browser xhs fill` 命令，不要直接设置 input.value
+
+## 故障排查
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| daemon 未运行 | 自动退出 | `opencli daemon restart` |
+| 导出按钮无反应 | JS click 不可靠 | 使用 `opencli browser xhs click` 命令 |
+| 下载文件未出现 | 等待时间不足 | 增加 sleep 时间到 10 秒 |
+| 内容分析数据错误 | 页面未正确加载 | 确认 URL 和左侧栏选中状态 |
+| 抖音按钮找不到 | 微前端容器 ID 动态变化 | 实时获取容器 ID |
+
+## 相关文件
+
+- 导出脚本：`scripts/export_data.py`
+- 方法论文档：`.export_methods.md`（项目目录内）
+
+## 测试状态
+
+✅ 脚本已测试通过（2026-08-07）
+- 小红书账号概览 4 个 tab 数据导出成功
+- 小红书内容分析数据导出成功
+- 抖音作品数据和粉丝数据导出成功
