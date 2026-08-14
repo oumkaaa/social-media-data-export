@@ -30,7 +30,7 @@ DOWNLOAD_TIMEOUT = 30
 
 def parse_args():
     parser = argparse.ArgumentParser(description='社交媒体数据导出脚本')
-    parser.add_argument('--channels', choices=['xiaohongshu', 'douyin', 'all'], default='all')
+    parser.add_argument('--channels', choices=['xiaohongshu', 'douyin', 'wechat', 'all'], default='all')
     parser.add_argument('--period', choices=['this-week', 'last-week', 'custom'], default='this-week')
     parser.add_argument('--start', type=str, help='自定义开始日期 (YYYY-MM-DD)')
     parser.add_argument('--end', type=str, help='自定义结束日期 (YYYY-MM-DD)')
@@ -119,6 +119,11 @@ def create_output_dirs(last_friday, this_thursday, channels, base_output_dir):
         douyin_dir = os.path.join(base_output_dir, f"抖音_{date_str}")
         os.makedirs(douyin_dir, exist_ok=True)
         dirs['douyin'] = douyin_dir
+    
+    if channels in ['wechat', 'all']:
+        wechat_dir = os.path.join(base_output_dir, f"微信公众号_{date_str}")
+        os.makedirs(wechat_dir, exist_ok=True)
+        dirs['wechat'] = wechat_dir
     
     return dirs, date_str
 
@@ -277,6 +282,77 @@ def export_douyin(douyin_dir, period, friday_str, thursday_str):
     print(f"  抖音数据：{success_count}/2 成功", flush=True)
     return success_count == 2
 
+
+def export_wechat(wechat_dir, period, friday_str, thursday_str):
+    print("📱 开始导出微信公众号 - 内容分析数据...", flush=True)
+    print(f"  日期范围：{friday_str} 至 {thursday_str}", flush=True)
+    
+    # 导航到内容分析页面
+    run_cmd('opencli browser xhs open "https://mp.weixin.qq.com/misc/appmsganalysis?action=report&type=daily_v2&token=1080546829&lang=zh_CN"', wait=5)
+    
+    # 点击"最近 7 天"快捷按钮
+    print("  → 设置日期范围：最近 7 天...", flush=True)
+    js_click_7d = """
+    var quickBtns = Array.from(document.querySelectorAll('*')).filter(el => {
+        var t = el.textContent.trim();
+        return t === '最近 7 天' && el.offsetHeight > 0;
+    });
+    if (quickBtns.length > 0) { quickBtns[0].click(); 'clicked'; } else { 'not found'; }
+    """
+    run_cmd(f'opencli browser xhs eval "{js_click_7d}"', wait=2)
+    
+    # 记录快照并点击下载
+    print("  → 点击下载数据明细...", flush=True)
+    before_snapshot = get_downloads_snapshot()
+    
+    js_click_download = """
+    var downloadBtn = document.querySelector('a.mass_all-downlink');
+    if (downloadBtn) { downloadBtn.click(); 'clicked'; } else { 'not found'; }
+    """
+    result = run_cmd(f'opencli browser xhs eval "{js_click_download}"')
+    print(f"    点击结果：{result}", flush=True)
+    
+    # 等待新文件下载（支持 xls 和 xlsx）
+    new_file = wait_for_new_download_wechat(before_snapshot)
+    if new_file:
+        ext = os.path.splitext(new_file)[1]
+        dest = os.path.join(wechat_dir, f"内容分析_流量数据{ext}")
+        moved = move_and_cleanup(new_file, dest)
+        if moved:
+            size = os.path.getsize(dest)
+            print(f"    ✅ 已保存：内容分析_流量数据{ext} ({size} bytes)", flush=True)
+            print(f"  微信公众号数据：1/1 成功", flush=True)
+            return True
+        else:
+            print(f"    ⚠️ 文件移动失败", flush=True)
+    else:
+        print(f"    ❌ 下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
+    
+    print(f"  微信公众号数据：0/1 成功", flush=True)
+    return False
+
+def get_downloads_snapshot_wechat():
+    """获取 Downloads 目录中所有 xls/xlsx 文件的快照"""
+    files = glob.glob(os.path.join(DOWNLOAD_DIR, "*.xls")) + glob.glob(os.path.join(DOWNLOAD_DIR, "*.xlsx"))
+    return {os.path.basename(f): os.path.getmtime(f) for f in files}
+
+def wait_for_new_download_wechat(before_snapshot, timeout=DOWNLOAD_TIMEOUT):
+    """等待新的 xls/xlsx 文件下载"""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        files = glob.glob(os.path.join(DOWNLOAD_DIR, "*.xls")) + glob.glob(os.path.join(DOWNLOAD_DIR, "*.xlsx"))
+        for f in files:
+            fname = os.path.basename(f)
+            if fname not in before_snapshot or os.path.getmtime(f) > before_snapshot[fname]:
+                time.sleep(2)
+                size1 = os.path.getsize(f)
+                time.sleep(1)
+                size2 = os.path.getsize(f)
+                if size1 == size2 and size1 > 0:
+                    return f
+        time.sleep(1)
+    return None
+
 def main():
     args = parse_args()
     
@@ -322,6 +398,12 @@ def main():
         douyin_dir = dirs['douyin']
         douyin_ok = export_douyin(douyin_dir, args.period, friday_str, thursday_str)
         results['抖音'] = douyin_ok
+        print(flush=True)
+    
+    if args.channels in ['wechat', 'all'] and 'wechat' in dirs:
+        wechat_dir = dirs['wechat']
+        wechat_ok = export_wechat(wechat_dir, args.period, friday_str, thursday_str)
+        results['微信公众号'] = wechat_ok
         print(flush=True)
     
     run_cmd("opencli browser xhs close")

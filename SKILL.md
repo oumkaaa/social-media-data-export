@@ -1,6 +1,6 @@
 ---
 name: social-media-data-export
-description: 社交媒体平台数据导出自动化。当用户需要从小红书或抖音创作者中心导出运营数据时使用。支持小红书账号概览（观看/互动/涨粉/发布数据）、内容分析（笔记明细），以及抖音作品数据和粉丝数据的批量导出。
+description: 社交媒体平台数据导出自动化。当用户需要从小红书、抖音或微信公众号创作者中心导出运营数据时使用。支持小红书账号概览（观看/互动/涨粉/发布数据）、内容分析（笔记明细），抖音作品数据和粉丝数据，以及微信公众号内容分析（流量数据）的批量导出。
 ---
 
 # 社交媒体数据导出
@@ -12,10 +12,12 @@ description: 社交媒体平台数据导出自动化。当用户需要从小红�
 ## 技能说明
 
 本技能提供自动化脚本，帮助团队成员快速从社交媒体平台创作者中心导出运营数据。
+强行使用 Interactive Widgets 的表单组件跟用户交互
 
 **支持平台**：
 - 小红书：账号概览（观看/互动/涨粉/发布数据）+ 内容分析（笔记明细）
 - 抖音：作品数据 + 粉丝数据
+- 微信公众号：内容分析（流量数据）
 
 **输出位置**：用户本地 `~/Documents/社交媒体数据/` 目录，按平台 + 日期范围组织文件夹
 
@@ -32,6 +34,12 @@ description: 社交媒体平台数据导出自动化。当用户需要从小红�
 - 登录链接：`https://creator.douyin.com/login`
 - 验证方式：打开数据中心页面检查是否跳转到登录页
 - 未登录时：提示用户完成登录
+
+**微信公众号**
+- 登录链接：`https://mp.weixin.qq.com/`
+- 验证命令：`opencli browser xhs open "https://mp.weixin.qq.com/misc/appmsganalysis?action=report&type=daily_v2&token=1080546829&lang=zh_CN"`
+- 验证方式：打开内容分析页面检查是否跳转到登录页
+- 未登录时：提示用户扫码登录
 
 ### 步骤 2：验证登录态
 
@@ -52,12 +60,14 @@ opencli browser xhs open "https://creator.douyin.com/creator-micro/data-center/o
 - header: "渠道"
 - question: "请选择要导出的平台渠道："
 - options:
-  - label: "全部渠道（小红书 + 抖音）" (Recommended)
+  - label: "全部渠道（小红书 + 抖音 + 微信公众号）" (Recommended)
     description: "导出所有平台的数据"
   - label: "仅小红书"
     description: "只导出小红书账号概览和内容分析数据"
   - label: "仅抖音"
     description: "只导出抖音作品数据和粉丝数据"
+  - label: "仅微信公众号"
+    description: "只导出微信公众号内容分析数据"
 
 **问题 2：日期范围**
 - header: "日期"
@@ -92,6 +102,7 @@ opencli browser xhs open "https://creator.douyin.com/creator-micro/data-center/o
 | 全部渠道 + 本周 | 无参数（默认） |
 | 仅小红书 + 本周 | `--channels xiaohongshu` |
 | 仅抖音 + 本周 | `--channels douyin` |
+| 仅微信公众号 + 本周 | `--channels wechat` |
 | 全部渠道 + 上周 | `--period last-week` |
 | 全部渠道 + 自定义 | `--period custom --start YYYY-MM-DD --end YYYY-MM-DD` |
 
@@ -131,6 +142,9 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
   - 作品数据.xlsx
   - 粉丝数据.xlsx
 
+【微信公众号_20260731-0806】
+  - 内容分析_流量数据.xls
+
 📅 数据周期：2026-07-31（上周五）至 2026-08-06（这周四）
 📂 保存位置：~/Documents/社交媒体数据/
 ```
@@ -139,7 +153,7 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 
 | 参数 | 说明 | 选项 | 默认值 |
 |------|------|------|--------|
-| `--channels` | 导出渠道 | `xiaohongshu`, `douyin`, `all` | `all` |
+| `--channels` | 导出渠道 | `xiaohongshu`, `douyin`, `wechat`, `all` | `all` |
 | `--period` | 日期范围 | `this-week`, `last-week`, `custom` | `this-week` |
 | `--start` | 自定义开始日期 | YYYY-MM-DD | - |
 | `--end` | 自定义结束日期 | YYYY-MM-DD | - |
@@ -163,6 +177,12 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 - **架构**: 微前端（Garfish），按钮在动态 ID 容器内
 - **按钮**: 容器内 `button` 元素中 `textContent.includes('导出')` 的按钮
 
+### 微信公众号 - 内容分析
+- **URL**: `https://mp.weixin.qq.com/misc/appmsganalysis?action=report&type=daily_v2&token=1080546829&lang=zh_CN`
+- **日期设置**: 点击"最近 7 天"快捷按钮
+- **按钮**: `a.mass_all-downlink`（下载数据明细）
+- **文件格式**: xls（旧版 Excel 格式）
+
 ## 验收标准
 
 导出完成后，检查以下内容：
@@ -174,6 +194,7 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 2. **文件完整性**：
    - 小红书账号概览：5 个文件（观看/互动/涨粉/发布/内容分析）
    - 抖音：2 个文件（作品数据/粉丝数据）
+   - 微信公众号：1 个文件（内容分析_流量数据）
 
 3. **数据有效性**：
    - 所有 xlsx 文件大小 > 0
@@ -207,7 +228,8 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 
 ## 测试状态
 
-✅ 脚本已测试通过（2026-08-07）
+✅ 脚本已测试通过（2026-08-14）
 - 小红书账号概览 4 个 tab 数据导出成功
 - 小红书内容分析数据导出成功
 - 抖音作品数据和粉丝数据导出成功
+- 微信公众号内容分析数据导出成功
