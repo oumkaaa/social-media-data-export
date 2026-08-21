@@ -176,10 +176,49 @@ python3 ~/.codex/skills/social-media-data-export/scripts/write_wechat_to_lark.py
   --thursday 2026-08-20
 ```
 
+**数据源说明**：
+- 表1（阅读人数）+ 表2（账号阅读）+ 表4（文章）：来自 `内容分析_流量数据.xls`
+- 表4 完整数据：还需从 `~/Downloads/total_*.xls` 按日期+标题匹配，过滤 emoji 标题
+- 表3（用户分析）：来自 `用户分析_用户增长.xls`（实际是 HTML 格式）
+
 **AI 职责**：
 - Table ID 配置在 `config/table_mapping.json`，脚本会自动加载
 - 对导出成功的账号逐个执行写入
 - 如果脚本报 ❌，如实向用户报告，不要跳过
+
+#### 4d. 写入后验证
+
+写入完成后，AI 必须执行以下检查：
+
+**小红书验证**：
+```bash
+# 检查账号数据表（每日）：应为 7 条记录
+lark-cli base +record-list --base-token <BASE_TOKEN> --table-id <DAILY_TABLE> --as user --filter-json '{"logic":"and","conditions":[["日期",">","<friday>T00:00:00.000+08:00"],["日期","<","<thursday>T23:59:59.000+08:00"]]}'
+
+# 检查内容数据表（笔记）：应为本周发布的笔记数
+lark-cli base +record-list --base-token <BASE_TOKEN> --table-id <CONTENT_TABLE> --as user --filter-json '{"logic":"and","conditions":[["首次发布时间",">","<friday>T00:00:00.000+08:00"],["首次发布时间","<","<thursday>T23:59:59.000+08:00"]]}'
+```
+
+**微信公众号验证**：
+```bash
+# 表1（阅读人数）：应为 7 天 × 8 渠道 = 56 条
+lark-cli base +record-list --base-token <BASE_TOKEN> --table-id <CONTENT_ANALYSIS_TABLE> --as user --filter-json '{"logic":"and","conditions":[["日期",">","<friday>T00:00:00.000+08:00"],["日期","<","<thursday>T23:59:59.000+08:00"]]}'
+
+# 表2（账号阅读）：应为 7 条
+lark-cli base +record-list --base-token <BASE_TOKEN> --table-id <ACCOUNT_READ_TABLE> --as user --filter-json '{"logic":"and","conditions":[["日期",">","<friday>T00:00:00.000+08:00"],["日期","<","<thursday>T23:59:59.000+08:00"]]}'
+
+# 表3（用户分析）：应为 7 条
+lark-cli base +record-list --base-token <BASE_TOKEN> --table-id <USER_ANALYSIS_TABLE> --as user --filter-json '{"logic":"and","conditions":[["时间",">","<friday>T00:00:00.000+08:00"],["时间","<","<thursday>T23:59:59.000+08:00"]]}'
+
+# 表4（文章）：应为本周发布的文章数
+lark-cli base +record-list --base-token <BASE_TOKEN> --table-id <ARTICLE_TABLE> --as user --filter-json '{"logic":"and","conditions":[["发表时间",">","<friday>T00:00:00.000+08:00"],["发表时间","<","<thursday>T23:59:59.000+08:00"]]}'
+```
+
+**验证要点**：
+- 记录数是否符合预期
+- 阅读人数是否为 0（如果为 0 说明写入逻辑有误）
+- 是否有重复日期（同一日期不应有多条记录）
+- 如有异常，如实向用户报告
 
 ### 步骤 5：交付文件
 
@@ -439,375 +478,3 @@ python3 scripts/update_mapping.py \
 ⚠️ 2026-08-21 发生过两类事故，已通过 harness 加固修复：
 1. 多账号导出时 Chrome Profile 未切换 → 导出脚本加入 switch-profile + whoami 校验
 2. 内容数据表重复写入 → 写入脚本加入写入前+写入后去重 校验
-
-## 微信公众号数据写入飞书多维表格工作流
-
-### 任务背景
-将微信公众号内容分析数据导出后，自动写入飞书多维表格，用于数据分析和报告制作。
-
-### 数据源
-- **文件位置**: `~/Documents/社交媒体数据/微信公众号_YYYYMMDD-MMDD/内容分析_流量数据.xls`
-- **文件格式**: xls（旧版 Excel 格式）
-- **数据周期**: 上周五 → 这周四（增量数据）
-
-### 目标表格（由用户提供）
-
-运行脚本时，会提示用户输入以下信息：
-
-1. **Base Token**：从飞书多维表格 URL 中提取
-   - URL 格式：`https://trip.larkenterprise.com/base/<BASE_TOKEN>?table=<TABLE_ID>&view=<VIEW_ID>`
-   
-2. **表 1 ID**：阅读人数表的 ID（以 `tbl` 开头）
-
-3. **表 2 ID**：账号阅读表的 ID（以 `tbl` 开头）
-
-#### 表 1 - 阅读人数（字段要求）
-**字段**:
-- `日期` (datetime): 格式 `yyyy/MM/dd`
-- `渠道` (text): 公众号消息、聊天会话、朋友圈、公众号主页、其他、推荐、搜一搜、全部
-- `阅读人数` (number): 整数
-
-**数据量**: 9 天 × 8 渠道 = 72 条记录
-
-#### 表 2 - 账号阅读（字段要求）
-**字段**:
-- `日期` (datetime): 格式 `yyyy/MM/dd`
-- `分享人数` (number): 整数
-- `阅读原文人数` (number): 整数
-- `收藏人数` (number): 整数
-- `群发篇数` (number): 整数
-- `阅读人数` (number): 整数（从"全部"渠道提取）
-
-**数据量**: 9 条记录（每日一条）
-
-### 工作流程
-
-#### 步骤 1: 解析 Excel 文件
-```python
-import xlrd
-
-wb = xlrd.open_workbook('内容分析_流量数据.xls')
-sh = wb.sheet_by_name('New Sheet1')
-
-# 表 1: 日期 (col 1), 渠道 (col 2), 阅读人数 (col 3)
-# 表 2: 日期 (col 5), 分享人数 (col 6), 阅读原文人数 (col 7), 收藏人数 (col 8), 群发篇数 (col 9)
-```
-
-#### 步骤 2: 筛选增量数据
-- 只保留上周五 → 这周四的数据（例如：2026-08-05 至 2026-08-13）
-- 日期格式转换：`2026/08/05`（用于写入飞书）
-
-#### 步骤 3: 检查并清理旧数据
-```bash
-# 搜索 8/5 之前的数据
-lark-cli base +record-search \
-  --base-token <BASE_TOKEN> \
-  --table-id <TABLE1_ID> \
-  --as user \
-  --keyword "公众号" \
-  --search-field "渠道" \
-  --filter-json '{"logic":"and","conditions":[["日期",">","2026-07-14"],["日期","<","2026-08-05"]]}' \
-  --limit 200
-
-# 删除旧数据
-lark-cli base +record-delete \
-  --base-token <BASE_TOKEN> \
-  --table-id <TABLE1_ID> \
-  --json '{"record_id_list": [...]}' \
-  --as user \
-  --yes
-```
-
-#### 步骤 4: 写入新数据
-```bash
-# 批量创建表 1
-lark-cli base +record-batch-create \
-  --base-token <BASE_TOKEN> \
-  --table-id <TABLE1_ID> \
-  --json '{"create_records": [...]}' \
-  --as user
-
-# 批量创建表 2
-lark-cli base +record-batch-create \
-  --base-token <BASE_TOKEN> \
-  --table-id <TABLE2_ID> \
-  --json '{"create_records": [...]}' \
-  --as user
-```
-
-#### 步骤 5: 验证数据
-```bash
-# 检查表 1 数据量（应为 72 条）
-lark-cli base +record-search \
-  --base-token <BASE_TOKEN> \
-  --table-id <TABLE1_ID> \
-  --as user \
-  --keyword "全部" \
-  --search-field "渠道" \
-  --filter-json '{"logic":"and","conditions":[["日期",">","2026-08-04"]]}' \
-  --limit 200
-
-# 检查表 2 数据量（应为 9 条）
-lark-cli base +record-search \
-  --base-token <BASE_TOKEN> \
-  --table-id <TABLE2_ID> \
-  --as user \
-  --keyword "2026" \
-  --search-field "日期" \
-  --filter-json '{"logic":"and","conditions":[["日期",">","2026-08-04"]]}' \
-  --limit 200
-```
-
-### 关键注意事项
-
-1. **增量写入**: 只写入上周五 → 这周四的数据，避免重复
-2. **日期格式**: 飞书 datetime 字段接受 `yyyy/MM/dd` 格式
-3. **阅读人数来源**: 表 2 的"阅读人数"字段从表 1 的"全部"渠道提取
-4. **批量限制**: 每次批量操作最多 200 条记录
-5. **删除确认**: 删除操作需要 `--yes` 参数确认
-
-### 完整脚本示例
-
-```python
-#!/usr/bin/env python3
-"""
-微信公众号数据写入飞书多维表格
-"""
-
-import xlrd
-import json
-import subprocess
-from datetime import datetime, timedelta
-
-BASE_TOKEN = "<用户提供的 Base Token>"
-TABLE1_ID = "<用户提供的表 1 ID>"  # 阅读人数
-TABLE2_ID = "<用户提供的表 2 ID>"  # 账号阅读
-
-def calculate_date_range():
-    """计算上周五 → 这周四的日期范围"""
-    today = datetime.now()
-    dow = today.weekday()  # 0=Monday, 4=Friday
-    
-    # 上周五
-    last_friday = today - timedelta(days=dow + 3)
-    # 这周四
-    this_thursday = today + timedelta(days=3 - dow)
-    
-    return last_friday, this_thursday
-
-def parse_excel(file_path, start_date, end_date):
-    """解析 Excel 文件，筛选增量数据"""
-    wb = xlrd.open_workbook(file_path)
-    sh = wb.sheet_by_name('New Sheet1')
-    
-    table1_records = []
-    table2_records = []
-    all_channel_reads = {}
-    
-    for r in range(3, sh.nrows):
-        date_val = sh.cell_value(r, 1)
-        channel = sh.cell_value(r, 2)
-        read_count = sh.cell_value(r, 3)
-        
-        if date_val and channel:
-            if isinstance(date_val, float):
-                date_tuple = xlrd.xldate_as_tuple(date_val, wb.datemode)
-                date_str = f'{date_tuple[0]:04d}/{date_tuple[1]:02d}/{date_tuple[2]:02d}'
-            else:
-                date_str = str(date_val).replace('-', '/')
-            
-            # 只保留增量数据
-            if start_date <= date_str <= end_date:
-                # 表 1
-                table1_records.append({
-                    '日期': date_str,
-                    '渠道': str(channel),
-                    '阅读人数': int(read_count) if read_count else 0
-                })
-                
-                # 记录"全部"渠道的阅读人数
-                if channel == '全部':
-                    all_channel_reads[date_str] = int(read_count) if read_count else 0
-        
-        # 表 2
-        date_val2 = sh.cell_value(r, 5)
-        if date_val2:
-            if isinstance(date_val2, float):
-                date_tuple = xlrd.xldate_as_tuple(date_val2, wb.datemode)
-                date_str2 = f'{date_tuple[0]:04d}/{date_tuple[1]:02d}/{date_tuple[2]:02d}'
-            else:
-                date_str2 = str(date_val2).replace('-', '/')
-            
-            if start_date <= date_str2 <= end_date:
-                share_count = sh.cell_value(r, 6)
-                read_original = sh.cell_value(r, 7)
-                favorite_count = sh.cell_value(r, 8)
-                publish_count = sh.cell_value(r, 9)
-                
-                table2_records.append({
-                    '日期': date_str2,
-                    '分享人数': int(share_count) if share_count else 0,
-                    '阅读原文人数': int(read_original) if read_original else 0,
-                    '收藏人数': int(favorite_count) if favorite_count else 0,
-                    '群发篇数': int(publish_count) if publish_count else 0,
-                    '阅读人数': all_channel_reads.get(date_str2, 0)
-                })
-    
-    return table1_records, table2_records
-
-def delete_old_records(table_id, start_date, end_date):
-    """删除指定日期范围内的旧数据"""
-    # 搜索旧数据
-    result = subprocess.run([
-        'lark-cli', 'base', '+record-search',
-        '--base-token', BASE_TOKEN,
-        '--table-id', table_id,
-        '--as', 'user',
-        '--keyword', '2026',
-        '--search-field', '日期',
-        '--filter-json', f'{{"logic":"and","conditions":[["日期",">","{start_date}"],["日期","<","{end_date}"]]}}',
-        '--limit', '200'
-    ], capture_output=True, text=True)
-    
-    # 解析 record IDs
-    record_ids = []
-    for line in result.stdout.split('\n'):
-        if line.startswith('| rec') and '2026-' in line:
-            parts = line.split('|')
-            if len(parts) >= 2:
-                rec_id = parts[1].strip()
-                if rec_id.startswith('rec'):
-                    record_ids.append(rec_id)
-    
-    if record_ids:
-        # 批量删除
-        ids_json = json.dumps({"record_id_list": record_ids})
-        subprocess.run([
-            'lark-cli', 'base', '+record-delete',
-            '--base-token', BASE_TOKEN,
-            '--table-id', table_id,
-            '--json', ids_json,
-            '--as', 'user',
-            '--yes'
-        ], capture_output=True, text=True)
-        
-        print(f'  删除了 {len(record_ids)} 条旧数据')
-
-def batch_create_records(table_id, records):
-    """批量创建记录"""
-    data_json = json.dumps({"create_records": records}, ensure_ascii=False)
-    result = subprocess.run([
-        'lark-cli', 'base', '+record-batch-create',
-        '--base-token', BASE_TOKEN,
-        '--table-id', table_id,
-        '--json', data_json,
-        '--as', 'user'
-    ], capture_output=True, text=True)
-    
-    if '"ok": true' in result.stdout:
-        print(f'  成功写入 {len(records)} 条记录')
-    else:
-        print(f'  写入失败：{result.stderr[:200]}')
-
-def main():
-    # 计算日期范围
-    last_friday, this_thursday = calculate_date_range()
-    start_date = last_friday.strftime('%Y/%m/%d')
-    end_date = this_thursday.strftime('%Y/%m/%d')
-    
-    print(f'数据周期：{start_date} 至 {end_date}')
-    
-    # 解析 Excel
-    file_path = f'~/Documents/社交媒体数据/微信公众号_{last_friday.strftime("%Y%m%d")}-{this_thursday.strftime("%m%d")}/内容分析_流量数据.xls'
-    file_path = file_path.replace('~', '/Users/wangwenjia')
-    
-    print('解析 Excel 文件...')
-    table1_records, table2_records = parse_excel(file_path, start_date, end_date)
-    print(f'  表 1: {len(table1_records)} 条记录')
-    print(f'  表 2: {len(table2_records)} 条记录')
-    
-    # 清理旧数据
-    print('清理旧数据...')
-    delete_old_records(TABLE1_ID, '2026/01/01', start_date)
-    delete_old_records(TABLE2_ID, '2026/01/01', start_date)
-    
-    # 写入新数据
-    print('写入新数据...')
-    batch_create_records(TABLE1_ID, table1_records)
-    batch_create_records(TABLE2_ID, table2_records)
-    
-    print('完成！')
-
-if __name__ == '__main__':
-    main()
-```
-
-### Table ID 配置管理
-
-当用户提供新的飞书多维表格链接时，使用辅助脚本自动提取 base_token 和 table_id 并更新配置。
-
-### 使用场景
-
-- 用户首次配置账号的表格映射
-- 用户更换了多维表格，需要更新 table_id
-- 新增账号或新增表格类型
-
-### 使用方法
-
-```bash
-python3 scripts/update_mapping.py \
-  --account "账号名称" \
-  --field "字段名" \
-  --url "飞书多维表格URL"
-```
-
-### 参数说明
-
-- `--account`: 账号名称（如：火车票小红书、火车票公众号）
-- `--field`: 字段名，根据平台和表格类型选择：
-  - 小红书：`daily_table`（账号数据）、`content_table`（内容数据）、`weekly_table`（周数据）、`monthly_table`（月数据）
-  - 微信公众号：`content_analysis_table`（内容分析）、`account_read_table`（账号阅读）、`user_analysis_table`（用户分析）
-- `--url`: 飞书多维表格的完整 URL
-
-### 示例
-
-```bash
-# 更新火车票小红书的账号数据表
-python3 scripts/update_mapping.py \
-  --account "火车票小红书" \
-  --field "daily_table" \
-  --url "https://trip.larkenterprise.com/base/JsIRbu5AuaCmK4sehzrcc27Enze?table=tblaHFlqebt9Wwgy&view=vewKB6LFJT"
-
-# 更新火车票公众号的内容分析表
-python3 scripts/update_mapping.py \
-  --account "火车票公众号" \
-  --field "content_analysis_table" \
-  --url "https://trip.larkenterprise.com/base/JsIRbu5AuaCmK4sehzrcc27Enze?table=tblCG4L8bqFA7S8u&view=xxx"
-```
-
-### AI 职责
-
-当用户提供飞书链接时：
-1. 询问用户这个表格属于哪个账号
-2. 询问用户这个表格的用途（账号数据/内容数据/阅读人数等）
-3. 根据答案确定 `--account` 和 `--field` 参数
-4. 运行 `update_mapping.py` 脚本更新配置
-5. 确认更新成功
-
----
-
-## 相关文件
-
-- 导出脚本：`scripts/export_data.py`
-- 飞书写入脚本：`scripts/write_to_lark_base.py`（待创建）
-- 方法论文档：`.export_methods.md`（项目目录内）
-
-## 测试状态
-
-✅ 脚本已测试通过（2026-08-21）
-- 小红书账号概览 4 个 tab 数据导出成功
-- 小红书内容分析数据导出成功
-- 抖音作品数据和粉丝数据导出成功
-- 微信公众号内容分析数据导出成功
-- 微信公众号用户分析数据导出成功
-- 微信公众号数据写入飞书多维表格成功（增量写入）
