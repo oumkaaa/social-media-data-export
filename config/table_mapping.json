@@ -1,0 +1,29 @@
+{
+  "火车票小红书": {
+    "base_token": "JsIRbu5AuaCmK4sehzrcc27Enze",
+    "daily_table": "tblaHFlqebt9Wwgy",
+    "content_table": "tbllh9eAiFHSrjwd"
+  },
+  "旅行小红书": {
+    "base_token": "JsIRbu5AuaCmK4sehzrcc27Enze",
+    "daily_table": "tbltk1Sd7VDgMMhI",
+    "content_table": "tblrBLyZPX4EQJht"
+  },
+  "员工号": {
+    "base_token": "JsIRbu5AuaCmK4sehzrcc27Enze",
+    "daily_table": "tblKwDtO87LHKmxU",
+    "content_table": "tbleiJL8pAaY73Mv"
+  },
+  "火车票公众号": {
+    "base_token": "JsIRbu5AuaCmK4sehzrcc27Enze",
+    "content_analysis_table": "tblCG4L8bqFA7S8u",
+    "account_read_table": "tbl7Ju5W6ruBy7dx",
+    "user_analysis_table": "tbl2WLGep98yGbxl"
+  },
+  "旅行公众号": {
+    "base_token": "JsIRbu5AuaCmK4sehzrcc27Enze",
+    "content_analysis_table": "待补充",
+    "account_read_table": "待补充",
+    "user_analysis_table": "待补充"
+  }
+}

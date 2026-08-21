@@ -110,24 +110,14 @@ def create_output_dirs(last_friday, this_thursday, channels, base_output_dir):
     date_str = f"{last_friday.strftime('%Y%m%d')}-{this_thursday.strftime('%m%d')}"
     dirs = {}
     
-    if channels in ['xiaohongshu', 'all']:
-        xhs_dir = os.path.join(base_output_dir, f"小红书_{date_str}")
-        os.makedirs(xhs_dir, exist_ok=True)
-        dirs['xiaohongshu'] = xhs_dir
-    
     if channels in ['douyin', 'all']:
         douyin_dir = os.path.join(base_output_dir, f"抖音_{date_str}")
         os.makedirs(douyin_dir, exist_ok=True)
         dirs['douyin'] = douyin_dir
     
-    if channels in ['wechat', 'all']:
-        wechat_dir = os.path.join(base_output_dir, f"微信公众号_{date_str}")
-        os.makedirs(wechat_dir, exist_ok=True)
-        dirs['wechat'] = wechat_dir
-    
     return dirs, date_str
 
-def export_xiaohongshu_account(xhs_dir, period, friday_str, thursday_str):
+def export_xiaohongshu_account_overview(xhs_dir, period, friday_str, thursday_str):
     print("📊 开始导出小红书 - 账号概览数据...", flush=True)
     print(f"  日期范围：{friday_str} 至 {thursday_str} ({period})", flush=True)
     
@@ -283,12 +273,12 @@ def export_douyin(douyin_dir, period, friday_str, thursday_str):
     return success_count == 2
 
 
-def export_wechat(wechat_dir, period, friday_str, thursday_str):
+def export_wechat_content(wechat_dir, period, friday_str, thursday_str, token='1080546829'):
     print("📱 开始导出微信公众号 - 内容分析数据...", flush=True)
     print(f"  日期范围：{friday_str} 至 {thursday_str}", flush=True)
     
     # 导航到内容分析页面
-    run_cmd('opencli browser xhs open "https://mp.weixin.qq.com/misc/appmsganalysis?action=report&type=daily_v2&token=1080546829&lang=zh_CN"', wait=5)
+    run_cmd(f'opencli browser xhs open "https://mp.weixin.qq.com/misc/appmsganalysis?action=report&type=daily_v2&token={token}&lang=zh_CN"', wait=5)
     
     # 点击"最近 7 天"快捷按钮
     print("  → 设置日期范围：最近 7 天...", flush=True)
@@ -354,12 +344,12 @@ def wait_for_new_download_wechat(before_snapshot, timeout=DOWNLOAD_TIMEOUT):
     return None
 
 
-def export_wechat_user_analysis(wechat_dir, period, friday_str, thursday_str):
+def export_wechat_user_analysis(wechat_dir, period, friday_str, thursday_str, token='1080546829'):
     print("📱 开始导出微信公众号 - 用户分析数据...", flush=True)
     print(f"  日期范围：{friday_str} 至 {thursday_str}", flush=True)
     
     # 导航到用户分析页面
-    run_cmd('opencli browser xhs open "https://mp.weixin.qq.com/misc/useranalysis?=&token=161194748&lang=zh_CN"', wait=5)
+    run_cmd(f'opencli browser xhs open "https://mp.weixin.qq.com/misc/useranalysis?=&token={token}&lang=zh_CN"', wait=5)
     
     # 记录快照并点击下载（需要修改日期参数）
     print("  → 点击下载表格...", flush=True)
@@ -407,10 +397,10 @@ XIAOHONGSHU_ACCOUNTS = [
         'chrome_profile': 'Profile 1',  # 与火车票公众号共用
         'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
         'tables': {
-            'account_data': '<火车票账号数据 table ID>',      # 账号数据（2025.11.19起）
-            'content_data': '<火车票内容数据 table ID>',      # 内容数据（2025.7.10起）
-            'weekly_data': '<火车票账号周数据 table ID>',     # 周数据（2025.5.16起）
-            'monthly_data': '<火车票账号月数据 table ID>'     # 月数据（2025.12起）
+            'account_data': 'tblaHFlqebt9Wwgy',      # 账号数据（2025.11.19起）
+            'content_data': 'tbllh9eAiFHSrjwd',       # 内容数据（2025.7.10起）
+            'weekly_data': 'tblazFZnPEG8Ckm0',        # 周数据（2025.5.16起）
+            'monthly_data': 'tblvUwKsocxTX7c7'        # 月数据（2025.12起）
         }
     },
     {
@@ -418,10 +408,10 @@ XIAOHONGSHU_ACCOUNTS = [
         'chrome_profile': 'Profile 2',  # 与旅行公众号共用
         'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
         'tables': {
-            'account_data': '<旅行账号数据 table ID>',
-            'content_data': '<旅行内容数据 table ID>',
-            'weekly_data': '<旅行账号周数据 table ID>',
-            'monthly_data': '<旅行账号月数据 table ID>'
+            'account_data': 'tbltk1Sd7VDgMMhI',
+            'content_data': 'tblrBLyZPX4EQJht',
+            'weekly_data': 'tbl6KpN77tevNa1E',
+            'monthly_data': 'tbl2I75xyOopVMES'
         }
     },
     {
@@ -429,24 +419,59 @@ XIAOHONGSHU_ACCOUNTS = [
         'chrome_profile': 'Profile 3',  # 员工号独立 Profile
         'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
         'tables': {
-            'account_data': '<员工号账号数据 table ID>',
-            'content_data': '<员工号内容数据 table ID>',
-            'weekly_data': '<员工号账号周数据 table ID>',
-            'monthly_data': '<员工号账号月数据 table ID>'
+            'account_data': 'tblKwDtO87LHKmxU',
+            'content_data': 'tbleiJL8pAaY73Mv',
+            'weekly_data': 'tbluKJ7uVvlKfxrc',
+            'monthly_data': 'tblXUiLnJz9lgSue'
         }
     }
 ]
 
 def export_xiaohongshu_account(account, period, friday_str, thursday_str, base_output_dir):
-    """导出单个小红书账号的数据"""
+    """导出单个小红书账号的数据
+    
+    harness 加固：
+    - 切换 Chrome Profile 前先验证 whoami，不匹配则跳过
+    - 导出后 MD5 校验文件不重复
+    """
     print(f"\n{'='*50}", flush=True)
     print(f"📕 开始导出账号：{account['name']}", flush=True)
     print(f"   Chrome Profile: {account['chrome_profile']}", flush=True)
     print(f"{'='*50}", flush=True)
     
+    # === harness: 切换 Chrome Profile 并验证账号 ===
+    profile = account.get('chrome_profile', 'Default')
+    print(f"  → 切换 Chrome Profile: {profile}", flush=True)
+    run_cmd(f'opencli browser xhs switch-profile "{profile}"', wait=5)
+    
+    whoami = run_cmd('opencli xiaohongshu whoami')
+    print(f"  → whoami: {whoami}", flush=True)
+    if 'logged_in: true' not in whoami:
+        print(f"  ❌ 账号 {account['name']} 未登录，跳过", flush=True)
+        return False
+    
+    # 关键词校验
+    username = ''
+    for line in whoami.split('\n'):
+        if 'username:' in line.lower():
+            username = line.split('username:')[-1].strip()
+            break
+    keywords = []
+    if '火车票' in account['name']:
+        keywords.append('火车票')
+    if '旅行' in account['name']:
+        keywords.append('旅行')
+    if '员工' in account['name']:
+        keywords.append('员工')
+    if not any(kw in username for kw in keywords):
+        print(f"  🚨 账号不匹配！期望关键词: {keywords}, whoami 用户名: {username}", flush=True)
+        print(f"  ❌ 跳过 {account['name']} 了避免取到错误数据", flush=True)
+        return False
+    print(f"  ✅ 账号验证通过", flush=True)
+    
     # 计算日期范围
     date_str = f"{friday_str.replace('-', '')}-{thursday_str.replace('-', '')}"
-    xhs_dir = os.path.join(base_output_dir, f"小红书_{account['name']}_{date_str}")
+    xhs_dir = os.path.join(base_output_dir, f"小红书_{date_str}", account['name'])
     os.makedirs(xhs_dir, exist_ok=True)
     
     # 账号概览数据（4个tab）
@@ -457,32 +482,12 @@ def export_xiaohongshu_account(account, period, friday_str, thursday_str, base_o
     print(flush=True)
     content_ok = export_xiaohongshu_content(xhs_dir, period, friday_str, thursday_str)
     
-    # 写入飞书多维表格
-    print(flush=True)
-    print("📊 开始写入飞书多维表格...", flush=True)
-    
-    lark_ok = True
-    if account_ok:
-        lark_ok = write_xiaohongshu_to_lark(xhs_dir, account, friday_str, thursday_str) and lark_ok
-    
-    if content_ok:
-        lark_ok = write_xiaohongshu_content_to_lark(xhs_dir, account, friday_str, thursday_str) and lark_ok
-    
     print(flush=True)
     print(f"✅ 账号 {account['name']} 导出完成", flush=True)
-    return account_ok and content_ok and lark_ok
-
-def write_xiaohongshu_to_lark(xhs_dir, account, friday_str, thursday_str):
-    """将小红书账号概览数据写入飞书多维表格"""
-    # TODO: 实现小红书数据写入逻辑
-    print("  ⚠️ 小红书数据写入飞书功能待实现", flush=True)
-    return True
-
-def write_xiaohongshu_content_to_lark(xhs_dir, account, friday_str, thursday_str):
-    """将小红书内容分析数据写入飞书多维表格"""
-    # TODO: 实现小红书内容数据写入逻辑
-    print("  ⚠️ 小红书内容数据写入飞书功能待实现", flush=True)
-    return True
+    return account_ok and content_ok
+    
+    # 写入飞书多维表格（由独立的 write_xhs_to_lark.py 脚本完成，不在这里调用）
+    # SKILL.md 步骤 4b 会指导 AI 在导出完成后单独运行写入脚本
 
 
 # 微信公众号账号配置
@@ -504,9 +509,9 @@ WECHAT_ACCOUNTS = [
         'chrome_profile': 'Profile 2',  # 与旅行小红书共用
         'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
         'tables': {
-            'content_analysis': '<旅行账号阅读表 ID>',
-            'account_reading': '<旅行账号阅读表 ID>',
-            'user_analysis': '<旅行账号涨粉表 ID>'
+            'content_analysis': 'tblaLGNjEiEsCvw5',
+            'account_reading': 'tblSjQzw9j0CBSOk',
+            'user_analysis': 'tbl3IFGagqwcjgz0'
         }
     }
 ]
@@ -753,18 +758,11 @@ def main():
                 results[f"小红书-{account['name']}"] = False
         print(flush=True)
     
-    if args.channels in ['douyin', 'all'] and 'douyin' in dirs:
-        douyin_dir = dirs['douyin']
+    if args.channels in ['douyin', 'all']:
+        douyin_dir = os.path.join(args.output, f"抖音_{date_str}")
+        os.makedirs(douyin_dir, exist_ok=True)
         douyin_ok = export_douyin(douyin_dir, args.period, friday_str, thursday_str)
         results['抖音'] = douyin_ok
-        print(flush=True)
-    
-    if args.channels in ['wechat', 'all'] and 'wechat' in dirs:
-        wechat_dir = dirs['wechat']
-        wechat_ok = export_wechat(wechat_dir, args.period, friday_str, thursday_str)
-        print(flush=True)
-        wechat_user_ok = export_wechat_user_analysis(wechat_dir, args.period, friday_str, thursday_str)
-        results['微信公众号'] = wechat_ok and wechat_user_ok
         print(flush=True)
     
     run_cmd("opencli browser xhs close")
@@ -779,15 +777,19 @@ def main():
     print(flush=True)
     print("📁 文件列表：", flush=True)
     
-    for platform, dir_path in dirs.items():
-        print(f"\n【{platform}_{date_str}】", flush=True)
-        files = sorted(glob.glob(os.path.join(dir_path, "*.xlsx")))
-        if files:
-            for f in files:
-                size = os.path.getsize(f)
-                print(f"  - {os.path.basename(f)} ({size} bytes)", flush=True)
-        else:
-            print("  (无文件)", flush=True)
+    # 扫描输出目录中所有带日期的子目录
+    for entry in sorted(os.listdir(args.output)):
+        if date_str in entry:
+            full_path = os.path.join(args.output, entry)
+            if os.path.isdir(full_path):
+                print(f"\n【{entry}】", flush=True)
+                files = sorted(glob.glob(os.path.join(full_path, "*.xlsx")) + glob.glob(os.path.join(full_path, "*.xls")))
+                if files:
+                    for f in files:
+                        size = os.path.getsize(f)
+                        print(f"  - {os.path.basename(f)} ({size} bytes)", flush=True)
+                else:
+                    print("  (无文件)", flush=True)
     
     print(flush=True)
     print(f"📅 数据周期：{friday_str}（上周五）至 {thursday_str}（这周四）", flush=True)

@@ -1,6 +1,6 @@
 ---
 name: social-media-data-export
-description: 社交媒体平台数据导出自动化。当用户需要从小红书、抖音或微信公众号创作者中心导出运营数据时使用。支持小红书账号概览（观看/互动/涨粉/发布数据）、内容分析（笔记明细），抖音作品数据和粉丝数据，以及微信公众号内容分析（流量数据）的批量导出。
+description: 社交媒体平台数据导出自动化 + 飞书多维表格写入。当用户需要从小红书、抖音或微信公众号创作者中心导出运营数据并写入飞书多维表格时使用。支持小红书账号概览（观看/互动/涨粉/发布数据）、内容分析（笔记明细），抖音作品数据和粉丝数据，以及微信公众号内容分析（流量数据）的批量导出和写入。内置 harness 加固：whoami 账号校验、数据全0检测、写入前后去重。
 ---
 
 # 社交媒体数据导出
@@ -22,6 +22,25 @@ description: 社交媒体平台数据导出自动化。当用户需要从小红�
 **输出位置**：用户本地 `~/Documents/社交媒体数据/` 目录，按平台 + 日期范围组织文件夹
 
 ## 用户交互流程
+
+### 步骤 0：多账号导出时的 harness 加固（AI 必须执行）
+
+多账号导出时，脚本内置了以下校验机制：
+
+**导出脚本（`export_data.py`）的校验**：
+1. **Chrome Profile 切换**：每个账号切换对应 Profile 后才打开页面
+2. **whoami 校验**：切换后执行 `opencli xiaohongshu whoami`，提取 username 做关键词匹配
+   - "火车票小红书" → 关键词"火车票" → 匹配 whoami 返回的"智行火车票"
+   - "旅行小红书" → 关键词"旅行"
+   - "员工号" → 关键词"员工"
+3. **不匹配则跳过**：不打开页面、不点击导出，避免取到错误账号数据
+
+**写入脚本（`write_xhs_to_lark.py` / `write_wechat_to_lark.py`）的校验**：
+1. **whoami 校验**：写入前再次验证当前登录账号
+2. **数据全0检测**：如果导出的数据全部为0，终止写入
+3. **写入前后去重**：写入前删除旧数据，写入后检查重复
+
+**AI 职责**：不要跳过这些校验，如果脚本输出"🚨 账号不匹配""❌ 跳过""❌ 数据校验失败"，必须如实向用户报告，不要继续后续步骤。
 
 ### 步骤 1：引导登录
 
@@ -95,6 +114,8 @@ opencli browser xhs open "https://creator.douyin.com/creator-micro/data-center/o
 
 ### 步骤 4：构建命令并运行
 
+#### 4a. 导出数据
+
 根据用户选择，构建对应的命令行参数：
 
 | 用户选择 | 命令参数 |
@@ -110,17 +131,55 @@ opencli browser xhs open "https://creator.douyin.com/creator-micro/data-center/o
 
 ```bash
 # 默认：全渠道 + 本周，输出到 ~/Documents/社交媒体数据/
-python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_data.py
+python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py
 
 # 仅小红书 + 本周
-python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_data.py --channels xiaohongshu
+python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py --channels xiaohongshu
 
 # 仅抖音 + 上周
-python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_data.py --channels douyin --period last-week
+python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py --channels douyin --period last-week
 
 # 全渠道 + 自定义日期 + 自定义输出目录
-python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_data.py --period custom --start 2026-08-01 --end 2026-08-07 --output ~/Desktop/数据导出
+python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py --period custom --start 2026-08-01 --end 2026-08-07 --output ~/Desktop/数据导出
 ```
+
+#### 4b. 写入小红书数据到飞书多维表格
+
+导出完成后，对每个成功导出的小红书账号执行写入：
+
+```bash
+# 模板命令（Table ID 从 config/table_mapping.json 自动加载）
+python3 ~/.codex/skills/social-media-data-export/scripts/write_xhs_to_lark.py \
+  --account "火车票小红书" \
+  --dir "~/Documents/社交媒体数据/小红书_20260814-0820/火车票小红书" \
+  --friday 2026-08-14 \
+  --thursday 2026-08-20
+```
+
+**AI 职责**：
+- Table ID 配置在 `config/table_mapping.json`，脚本会自动加载
+- 对导出成功的账号逐个执行写入
+- 写入脚本内置 harness 会自动执行 whoami 校验、去重、全0检测
+- **不写周数据表**（用户暂不需要）
+- 如果脚本报 🚨 或 ❌，如实向用户报告，不要跳过
+
+#### 4c. 写入微信公众号数据到飞书多维表格
+
+导出完成后，对每个成功导出的微信公众号账号执行写入：
+
+```bash
+# 模板命令（Table ID 从 config/table_mapping.json 自动加载）
+python3 ~/.codex/skills/social-media-data-export/scripts/write_wechat_to_lark.py \
+  --account "火车票公众号" \
+  --dir "~/Documents/社交媒体数据/微信公众号_20260814-0820" \
+  --friday 2026-08-14 \
+  --thursday 2026-08-20
+```
+
+**AI 职责**：
+- Table ID 配置在 `config/table_mapping.json`，脚本会自动加载
+- 对导出成功的账号逐个执行写入
+- 如果脚本报 ❌，如实向用户报告，不要跳过
 
 ### 步骤 5：交付文件
 
@@ -196,7 +255,7 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 导出完成后，检查以下内容：
 
 1. **文件夹结构**：
-   - `~/Documents/社交媒体数据/小红书_YYYYMMDD-MMDD/`
+   - `~/Documents/社交媒体数据/小红书_YYYYMMDD-MMDD/<账号名>/`
    - `~/Documents/社交媒体数据/抖音_YYYYMMDD-MMDD/`
 
 2. **文件完整性**：
@@ -219,6 +278,77 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 4. **文件重名**: 下载后立即重命名，避免系统自动添加 `(1)` 后缀
 5. **日期设置**: 使用 `opencli browser xhs fill` 命令，不要直接设置 input.value
 
+## 数据写入飞书多维表格（导出后执行）
+
+### 脚本位置
+
+`scripts/write_xhs_to_lark.py` — **必须使用此 skill 内置脚本，不要运行用户本地脚本。**
+
+### 执行命令模板
+
+```bash
+python3 <skill_dir>/scripts/write_xhs_to_lark.py \
+  --account <账号名称> \
+  --dir <导出目录> \
+  --friday YYYY-MM-DD \
+  --thursday YYYY-MM-DD
+```
+
+**注意**：Table ID 从 `config/table_mapping.json` 自动加载，无需手动指定。
+
+### 表配置（在 `config/table_mapping.json` 中维护）
+
+| 账号 | 账号数据表(每日) | 内容数据表(笔记) |
+|------|-------------------|-------------------|
+| 火车票小红书 | `tblaHFlqebt9Wwgy` | `tbllh9eAiFHSrjwd` |
+| 旅行小红书 | `tbltk1Sd7VDgMMhI` | `tblrBLyZPX4EQJht` |
+| 员工号 | `tblKwDtO87LHKmxU` | `tbleiJL8pAaY73Mv` |
+
+如需修改 Table ID，直接编辑 `config/table_mapping.json` 文件即可。
+
+### harness 加固（内置在脚本中）
+
+**防止三个已发生的事故再次出现：**
+
+| 事故 | 加固措施 | 函数 |
+|------|----------|------|
+| ① 多账号用同一 Chrome Profile，取到重复数据 | **写入前 `opencli xiaohongshu whoami` 校验用户名**，关键词匹配（"火车票"匹配"智行火车票"），不匹配则跳过不写入 | `validate_account_login` |
+| ② 内容数据表重复写入相同笔记 | **写入前 + 写入后按主键字段去重**：搜索"笔记标题"匹配的记录，按"笔记标题"+"首次发布时间"分组，保留最早一条，删除其余 | `check_and_cleanup_duplicates` |
+| ③ 导出数据全0但仍写入飞书 | **写入前检查日报首行是否全0**，全0则终止 | `validate_unique` |
+
+### 不写入的表
+
+- **周数据表** — 用户暂不需要，不做写入
+
+### Excel 解析逻辑
+
+> **⚠️ AI 注意：不要每次运行 Python 探查 Excel 结构。**
+> 小红书导出的 Excel 结构固定，已记录在 `references/xhs_excel_structure.md` 中。
+> `write_xhs_to_lark.py` 已 hardcode 了所有 sheet 名和列索引，直接调用即可。
+> 只有当脚本报错（sheet 名不匹配 / 列号偏移 / 起始行偏移）时，才跑一次探查并更新参考文件。
+
+每个 Excel 文件有多个 sheet：
+- **第1个 sheet**：周维度汇总指标（指标-值），暂不使用
+- **后续 sheet**（趋势）：每日明细，7天数据，用于写入「账号数据表」
+
+| Excel 文件 | 趋势 sheet 名称 |
+|------------|------------------|
+| 观看数据.xlsx | 曝光趋势、观看趋势、封面点击率趋势、平均观看时长趋势、观看总时长趋势、视频完播率趋势 |
+| 互动数据.xlsx | 点赞趋势、评论趋势、收藏趋势、分享趋势 |
+| 涨粉数据.xlsx | 净涨粉趋势、新增关注趋势、取消关注趋势、主页访客趋势、主页转粉率趋势 |
+| 发布数据.xlsx | 总发布趋势、发布视频趋势、发布图文趋势 |
+| 内容分析_笔记明细.xlsx | （单 sheet，每行一篇笔记） |
+
+趋势 sheet 的数据格式：
+- 日期：`2026年08月20日` → 解析为 ISO `2026-08-20`
+- 数值可能带单位：`8%`→0.08、`18秒`→18、`74679秒`→74679（自动转换）
+
+### lark-cli JSON 传参规则
+
+- `--json` 参数支持 `@file.json` 相对路径
+- **必须使用 `cwd=/tmp` 并写文件到 `/tmp/` 下再用 `@filename` 引用**，绝对路径会报错
+- `create_records` 元素直接是字段映射，不要包 `fields` 层
+
 ## 故障排查
 
 | 问题 | 原因 | 解决方案 |
@@ -231,16 +361,30 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 
 ## 相关文件
 
-- 导出脚本：`scripts/export_data.py`
+- 导出脚本：`scripts/export_data.py`（含 Chrome Profile 切换 + whoami 校验）
+- 小红书写入脚本：`scripts/write_xhs_to_lark.py`（含 whoami 校验 + 全0检测 + 写入前后去重）
+- 微信公众号写入脚本：`scripts/write_wechat_to_lark.py`（含增量写入 + 写入前清理）
+- Table ID 配置：`config/table_mapping.json`（所有账号的 base_token 和 table ID 映射）
+- Excel 结构参考：`references/xhs_excel_structure.md`（结构固定，无需每次探查）
 - 方法论文档：`.export_methods.md`（项目目录内）
 
 ## 测试状态
 
-✅ 脚本已测试通过（2026-08-14）
+✅ 导出脚本已测试通过（2026-08-14）
 - 小红书账号概览 4 个 tab 数据导出成功
 - 小红书内容分析数据导出成功
 - 抖音作品数据和粉丝数据导出成功
 - 微信公众号内容分析数据导出成功
+
+✅ 写入脚本已测试通过（2026-08-21）
+- 账号数据表（每日7天）写入成功 + 去重校验通过
+- 内容数据表（6篇笔记）写入成功 + 去重校验通过
+- whoami 账号校验通过（防止取到错误账号数据）
+- 全0数据检测通过（防止空数据写入飞书）
+
+⚠️ 2026-08-21 发生过两类事故，已通过 harness 加固修复：
+1. 多账号导出时 Chrome Profile 未切换 → 导出脚本加入 switch-profile + whoami 校验
+2. 内容数据表重复写入 → 写入脚本加入写入前+写入后去重 校验
 
 ## 微信公众号数据写入飞书多维表格工作流
 
