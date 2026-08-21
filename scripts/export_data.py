@@ -26,7 +26,7 @@ sys.stdout.reconfigure(line_buffering=True)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_OUTPUT_DIR = os.path.expanduser("~/Documents/社交媒体数据")
 DOWNLOAD_DIR = os.path.expanduser("~/Downloads")
-DOWNLOAD_TIMEOUT = 30
+DOWNLOAD_TIMEOUT = 60
 
 def parse_args():
     parser = argparse.ArgumentParser(description='社交媒体数据导出脚本')
@@ -56,22 +56,55 @@ def wait_for_new_download(before_snapshot, timeout=DOWNLOAD_TIMEOUT):
     """
     等待新的 xlsx 文件下载到 Downloads
     返回新文件路径，如果超时返回 None
+    
+    改进逻辑：
+    1. 检测新文件（文件名不在快照中）
+    2. 检测已有文件的修改时间变化（覆盖下载）
+    3. 等待文件写入完成（大小稳定）
     """
     start_time = time.time()
+    last_change_time = None
+    
     while time.time() - start_time < timeout:
         files = glob.glob(os.path.join(DOWNLOAD_DIR, "*.xlsx"))
+        new_or_updated = []
+        
         for f in files:
             fname = os.path.basename(f)
-            # 如果文件名不在快照中，或者修改时间更新了，说明是新文件
-            if fname not in before_snapshot or os.path.getmtime(f) > before_snapshot[fname]:
-                # 等待文件写入完成（大小稳定）
-                time.sleep(2)
+            mtime = os.path.getmtime(f)
+            
+            # 情况1：新文件（文件名不在快照中）
+            if fname not in before_snapshot:
+                new_or_updated.append(f)
+            # 情况2：已有文件但修改时间更新了（覆盖下载）
+            elif mtime > before_snapshot[fname]:
+                new_or_updated.append(f)
+        
+        if new_or_updated:
+            # 等待文件写入完成
+            time.sleep(1.5)
+            
+            for f in new_or_updated:
+                if not os.path.exists(f):
+                    continue
+                
                 size1 = os.path.getsize(f)
-                time.sleep(1)
+                time.sleep(0.5)
                 size2 = os.path.getsize(f)
+                
+                # 大小稳定且大于 0，说明下载完成
                 if size1 == size2 and size1 > 0:
                     return f
-        time.sleep(1)
+                
+                # 记录最后变化时间，用于超时判断
+                last_change_time = time.time()
+        
+        # 如果超过 10 秒没有新变化，可能下载卡住了
+        if last_change_time and (time.time() - last_change_time) > 10:
+            break
+        
+        time.sleep(0.5)
+    
     return None
 
 def move_and_cleanup(source_file, dest_path):
