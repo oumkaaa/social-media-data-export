@@ -189,7 +189,7 @@ python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py
 1. **创建 Chrome Profile**：
    - 打开 Chrome 浏览器
    - 点击右上角头像 → 添加
-   - 为每个小红书账号创建独立的 Profile（如：test3、test4、test5）
+   - 为每个账号组创建独立的 Profile（如：test1、test2、test3）
 
 2. **登录账号**：
    - 在每个 Profile 中分别登录对应的小红书账号
@@ -199,7 +199,7 @@ python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py
    ```bash
    ls ~/Library/Application\ Support/Google/Chrome/ | grep Profile
    ```
-   通常为 `Profile 3`、`Profile 4`、`Profile 5` 等
+   通常为 `Profile 1`、`Profile 2`、`Profile 3` 等
 
 ### 账号配置
 

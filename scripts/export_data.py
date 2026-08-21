@@ -400,11 +400,11 @@ def export_wechat_user_analysis(wechat_dir, period, friday_str, thursday_str):
 
 
 
-# 小红书账号配置
+# 小红书账号配置（与微信公众号共用 Chrome Profile）
 XIAOHONGSHU_ACCOUNTS = [
     {
         'name': '火车票小红书',
-        'chrome_profile': 'Profile 3',  # 需要创建对应的 Chrome Profile
+        'chrome_profile': 'Profile 1',  # 与火车票公众号共用
         'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
         'tables': {
             'account_data': '<火车票账号数据 table ID>',      # 账号数据（2025.11.19起）
@@ -415,7 +415,7 @@ XIAOHONGSHU_ACCOUNTS = [
     },
     {
         'name': '旅行小红书',
-        'chrome_profile': 'Profile 4',
+        'chrome_profile': 'Profile 2',  # 与旅行公众号共用
         'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
         'tables': {
             'account_data': '<旅行账号数据 table ID>',
@@ -426,7 +426,7 @@ XIAOHONGSHU_ACCOUNTS = [
     },
     {
         'name': '员工号',
-        'chrome_profile': 'Profile 5',
+        'chrome_profile': 'Profile 3',  # 员工号独立 Profile
         'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
         'tables': {
             'account_data': '<员工号账号数据 table ID>',
@@ -490,7 +490,7 @@ WECHAT_ACCOUNTS = [
     {
         'name': '火车票公众号',
         'token': '1080546829',
-        'chrome_profile': 'Profile 1',  # Chrome Profile 路径
+        'chrome_profile': 'Profile 1',  # 与火车票小红书共用
         'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
         'tables': {
             'content_analysis': 'tblCG4L8bqFA7S8u',  # 阅读人数（分渠道）
@@ -501,7 +501,7 @@ WECHAT_ACCOUNTS = [
     {
         'name': '旅行公众号',
         'token': '161194748',
-        'chrome_profile': 'Profile 2',  # Chrome Profile 路径
+        'chrome_profile': 'Profile 2',  # 与旅行小红书共用
         'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
         'tables': {
             'content_analysis': '<旅行账号阅读表 ID>',
