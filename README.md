@@ -180,6 +180,47 @@ python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py
 
 脚本会依次使用不同的 Chrome Profile 登录各个账号，自动下载数据并写入对应的飞书多维表格。
 
+
+
+## 📕 小红书多账号配置
+
+### Chrome Profile 设置
+
+1. **创建 Chrome Profile**：
+   - 打开 Chrome 浏览器
+   - 点击右上角头像 → 添加
+   - 为每个小红书账号创建独立的 Profile（如：test3、test4、test5）
+
+2. **登录账号**：
+   - 在每个 Profile 中分别登录对应的小红书账号
+   - 保持登录态，后续脚本会自动使用
+
+3. **获取 Profile 路径**：
+   ```bash
+   ls ~/Library/Application\ Support/Google/Chrome/ | grep Profile
+   ```
+   通常为 `Profile 3`、`Profile 4`、`Profile 5` 等
+
+### 账号配置
+
+编辑 `scripts/export_data.py` 中的 `XIAOHONGSHU_ACCOUNTS` 配置，为每个账号添加：
+- **name**: 账号名称（如：火车票小红书、旅行小红书、员工号）
+- **chrome_profile**: Chrome Profile 名称
+- **base_token**: 飞书多维表格 Base Token
+- **tables**: 对应的四个表格 ID（账号数据、内容数据、周数据、月数据）
+
+### 执行
+
+```bash
+# 导出所有小红书账号
+python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py --channels xiaohongshu
+
+# 导出所有平台
+python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py
+```
+
+脚本会依次使用不同的 Chrome Profile 登录各个账号，自动下载数据并写入对应的飞书多维表格。
+
 ## 🔧 依赖要求
 
 - **Python 3.7+**

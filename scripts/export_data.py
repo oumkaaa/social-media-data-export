@@ -399,6 +399,92 @@ def export_wechat_user_analysis(wechat_dir, period, friday_str, thursday_str):
     return False
 
 
+
+# 小红书账号配置
+XIAOHONGSHU_ACCOUNTS = [
+    {
+        'name': '火车票小红书',
+        'chrome_profile': 'Profile 3',  # 需要创建对应的 Chrome Profile
+        'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
+        'tables': {
+            'account_data': '<火车票账号数据 table ID>',      # 账号数据（2025.11.19起）
+            'content_data': '<火车票内容数据 table ID>',      # 内容数据（2025.7.10起）
+            'weekly_data': '<火车票账号周数据 table ID>',     # 周数据（2025.5.16起）
+            'monthly_data': '<火车票账号月数据 table ID>'     # 月数据（2025.12起）
+        }
+    },
+    {
+        'name': '旅行小红书',
+        'chrome_profile': 'Profile 4',
+        'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
+        'tables': {
+            'account_data': '<旅行账号数据 table ID>',
+            'content_data': '<旅行内容数据 table ID>',
+            'weekly_data': '<旅行账号周数据 table ID>',
+            'monthly_data': '<旅行账号月数据 table ID>'
+        }
+    },
+    {
+        'name': '员工号',
+        'chrome_profile': 'Profile 5',
+        'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
+        'tables': {
+            'account_data': '<员工号账号数据 table ID>',
+            'content_data': '<员工号内容数据 table ID>',
+            'weekly_data': '<员工号账号周数据 table ID>',
+            'monthly_data': '<员工号账号月数据 table ID>'
+        }
+    }
+]
+
+def export_xiaohongshu_account(account, period, friday_str, thursday_str, base_output_dir):
+    """导出单个小红书账号的数据"""
+    print(f"\n{'='*50}", flush=True)
+    print(f"📕 开始导出账号：{account['name']}", flush=True)
+    print(f"   Chrome Profile: {account['chrome_profile']}", flush=True)
+    print(f"{'='*50}", flush=True)
+    
+    # 计算日期范围
+    date_str = f"{friday_str.replace('-', '')}-{thursday_str.replace('-', '')}"
+    xhs_dir = os.path.join(base_output_dir, f"小红书_{account['name']}_{date_str}")
+    os.makedirs(xhs_dir, exist_ok=True)
+    
+    # 账号概览数据（4个tab）
+    print(flush=True)
+    account_ok = export_xiaohongshu_account_overview(xhs_dir, period, friday_str, thursday_str)
+    
+    # 内容分析数据
+    print(flush=True)
+    content_ok = export_xiaohongshu_content(xhs_dir, period, friday_str, thursday_str)
+    
+    # 写入飞书多维表格
+    print(flush=True)
+    print("📊 开始写入飞书多维表格...", flush=True)
+    
+    lark_ok = True
+    if account_ok:
+        lark_ok = write_xiaohongshu_to_lark(xhs_dir, account, friday_str, thursday_str) and lark_ok
+    
+    if content_ok:
+        lark_ok = write_xiaohongshu_content_to_lark(xhs_dir, account, friday_str, thursday_str) and lark_ok
+    
+    print(flush=True)
+    print(f"✅ 账号 {account['name']} 导出完成", flush=True)
+    return account_ok and content_ok and lark_ok
+
+def write_xiaohongshu_to_lark(xhs_dir, account, friday_str, thursday_str):
+    """将小红书账号概览数据写入飞书多维表格"""
+    # TODO: 实现小红书数据写入逻辑
+    print("  ⚠️ 小红书数据写入飞书功能待实现", flush=True)
+    return True
+
+def write_xiaohongshu_content_to_lark(xhs_dir, account, friday_str, thursday_str):
+    """将小红书内容分析数据写入飞书多维表格"""
+    # TODO: 实现小红书内容数据写入逻辑
+    print("  ⚠️ 小红书内容数据写入飞书功能待实现", flush=True)
+    return True
+
+
 # 微信公众号账号配置
 WECHAT_ACCOUNTS = [
     {
@@ -655,12 +741,16 @@ def main():
                 results[f"微信公众号-{account['name']}"] = False
         print(flush=True)
     
-    if args.channels in ['xiaohongshu', 'all'] and 'xiaohongshu' in dirs:
-        xhs_dir = dirs['xiaohongshu']
-        account_ok = export_xiaohongshu_account(xhs_dir, args.period, friday_str, thursday_str)
-        print(flush=True)
-        content_ok = export_xiaohongshu_content(xhs_dir, args.period, friday_str, thursday_str)
-        results['小红书'] = account_ok and content_ok
+    # 小红书多账号导出
+    if args.channels in ['xiaohongshu', 'all']:
+        print("📕 开始导出小红书数据（多账号）...", flush=True)
+        for account in XIAOHONGSHU_ACCOUNTS:
+            try:
+                ok = export_xiaohongshu_account(account, args.period, friday_str, thursday_str, args.output)
+                results[f"小红书-{account['name']}"] = ok
+            except Exception as e:
+                print(f"  账号 {account['name']} 导出失败：{e}", flush=True)
+                results[f"小红书-{account['name']}"] = False
         print(flush=True)
     
     if args.channels in ['douyin', 'all'] and 'douyin' in dirs:
