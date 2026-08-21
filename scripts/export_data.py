@@ -353,6 +353,51 @@ def wait_for_new_download_wechat(before_snapshot, timeout=DOWNLOAD_TIMEOUT):
         time.sleep(1)
     return None
 
+
+def export_wechat_user_analysis(wechat_dir, period, friday_str, thursday_str):
+    print("📱 开始导出微信公众号 - 用户分析数据...", flush=True)
+    print(f"  日期范围：{friday_str} 至 {thursday_str}", flush=True)
+    
+    # 导航到用户分析页面
+    run_cmd('opencli browser xhs open "https://mp.weixin.qq.com/misc/useranalysis?=&token=161194748&lang=zh_CN"', wait=5)
+    
+    # 记录快照并点击下载（需要修改日期参数）
+    print("  → 点击下载表格...", flush=True)
+    before_snapshot = get_downloads_snapshot_wechat()
+    
+    js_click_download = """
+    var btn = Array.from(document.querySelectorAll('a')).find(el => el.textContent.trim() === '下载表格');
+    if (btn) {
+        var newHref = btn.href.replace(/begin_date=\d{4}-\d{2}-\d{2}/, 'begin_date=' + arguments[0]).replace(/end_date=\d{4}-\d{2}-\d{2}/, 'end_date=' + arguments[1]);
+        btn.href = newHref;
+        btn.click();
+        'clicked with dates: ' + arguments[0] + ' to ' + arguments[1];
+    } else {
+        'not found';
+    }
+    """
+    result = run_cmd(f'opencli browser xhs eval "{js_click_download}" --args {friday_str} {thursday_str}')
+    print(f"    点击结果：{result}", flush=True)
+    
+    # 等待新文件下载
+    new_file = wait_for_new_download_wechat(before_snapshot)
+    if new_file:
+        ext = os.path.splitext(new_file)[1]
+        dest = os.path.join(wechat_dir, f"用户分析_用户增长{ext}")
+        moved = move_and_cleanup(new_file, dest)
+        if moved:
+            size = os.path.getsize(dest)
+            print(f"    ✅ 已保存：用户分析_用户增长{ext} ({size} bytes)", flush=True)
+            print(f"  微信公众号用户分析数据：1/1 成功", flush=True)
+            return True
+        else:
+            print(f"    ⚠️ 文件移动失败", flush=True)
+    else:
+        print(f"    ❌ 下载超时（{DOWNLOAD_TIMEOUT}秒）", flush=True)
+    
+    print(f"  微信公众号用户分析数据：0/1 成功", flush=True)
+    return False
+
 def main():
     args = parse_args()
     
@@ -403,7 +448,9 @@ def main():
     if args.channels in ['wechat', 'all'] and 'wechat' in dirs:
         wechat_dir = dirs['wechat']
         wechat_ok = export_wechat(wechat_dir, args.period, friday_str, thursday_str)
-        results['微信公众号'] = wechat_ok
+        print(flush=True)
+        wechat_user_ok = export_wechat_user_analysis(wechat_dir, args.period, friday_str, thursday_str)
+        results['微信公众号'] = wechat_ok and wechat_user_ok
         print(flush=True)
     
     run_cmd("opencli browser xhs close")

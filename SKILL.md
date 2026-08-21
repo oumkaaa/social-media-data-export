@@ -17,7 +17,7 @@ description: 社交媒体平台数据导出自动化。当用户需要从小红�
 **支持平台**：
 - 小红书：账号概览（观看/互动/涨粉/发布数据）+ 内容分析（笔记明细）
 - 抖音：作品数据 + 粉丝数据
-- 微信公众号：内容分析（流量数据）
+- 微信公众号：内容分析（流量数据）+ 用户分析（用户增长数据）
 
 **输出位置**：用户本地 `~/Documents/社交媒体数据/` 目录，按平台 + 日期范围组织文件夹
 
@@ -37,7 +37,7 @@ description: 社交媒体平台数据导出自动化。当用户需要从小红�
 
 **微信公众号**
 - 登录链接：`https://mp.weixin.qq.com/`
-- 验证命令：`opencli browser xhs open "https://mp.weixin.qq.com/misc/appmsganalysis?action=report&type=daily_v2&token=1080546829&lang=zh_CN"`
+- 验证命令：`opencli browser xhs open "https://mp.weixin.qq.com/misc/appmsganalysis?action=report&type=daily_v2&token=161194748&lang=zh_CN"`
 - 验证方式：打开内容分析页面检查是否跳转到登录页
 - 未登录时：提示用户扫码登录
 
@@ -67,7 +67,7 @@ opencli browser xhs open "https://creator.douyin.com/creator-micro/data-center/o
   - label: "仅抖音"
     description: "只导出抖音作品数据和粉丝数据"
   - label: "仅微信公众号"
-    description: "只导出微信公众号内容分析数据"
+    description: "只导出微信公众号内容分析和用户分析数据"
 
 **问题 2：日期范围**
 - header: "日期"
@@ -144,6 +144,7 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 
 【微信公众号_20260731-0806】
   - 内容分析_流量数据.xls
+  - 用户分析_用户增长.xls
 
 📅 数据周期：2026-07-31（上周五）至 2026-08-06（这周四）
 📂 保存位置：~/Documents/社交媒体数据/
@@ -178,10 +179,17 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 - **按钮**: 容器内 `button` 元素中 `textContent.includes('导出')` 的按钮
 
 ### 微信公众号 - 内容分析
-- **URL**: `https://mp.weixin.qq.com/misc/appmsganalysis?action=report&type=daily_v2&token=1080546829&lang=zh_CN`
+- **URL**: `https://mp.weixin.qq.com/misc/appmsganalysis?action=report&type=daily_v2&token=161194748&lang=zh_CN`
 - **日期设置**: 点击"最近 7 天"快捷按钮
 - **按钮**: `a.mass_all-downlink`（下载数据明细）
-- **文件格式**: xls（旧版 Excel 格式）
+- **文件格式**: xls（HTML 格式的 Excel 文件）
+
+### 微信公众号 - 用户分析
+- **URL**: `https://mp.weixin.qq.com/misc/useranalysis?=&token=161194748&lang=zh_CN`
+- **日期设置**: 修改下载链接的 begin_date 和 end_date 参数
+- **按钮**: `a` 元素中 `textContent === '下载表格'`
+- **文件格式**: xls（HTML 格式的 Excel 文件）
+- **数据内容**: 时间、新关注人数、取消关注人数、净增关注人数、累积关注人数
 
 ## 验收标准
 
@@ -194,7 +202,7 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 2. **文件完整性**：
    - 小红书账号概览：5 个文件（观看/互动/涨粉/发布/内容分析）
    - 抖音：2 个文件（作品数据/粉丝数据）
-   - 微信公众号：1 个文件（内容分析_流量数据）
+   - 微信公众号：2 个文件（内容分析_流量数据、用户分析_用户增长）
 
 3. **数据有效性**：
    - 所有 xlsx 文件大小 > 0
@@ -544,9 +552,10 @@ if __name__ == '__main__':
 
 ## 测试状态
 
-✅ 脚本已测试通过（2026-08-14）
+✅ 脚本已测试通过（2026-08-21）
 - 小红书账号概览 4 个 tab 数据导出成功
 - 小红书内容分析数据导出成功
 - 抖音作品数据和粉丝数据导出成功
 - 微信公众号内容分析数据导出成功
+- 微信公众号用户分析数据导出成功
 - 微信公众号数据写入飞书多维表格成功（增量写入）
