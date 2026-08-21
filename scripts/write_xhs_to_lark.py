@@ -431,10 +431,10 @@ def main():
     print(f"\n📝 [4] 写入账号数据表(每日)...")
     # 前置删除本周已有数据
     for day in dates:
-        delete_existing_records(base_token, args.daily_table, day.replace('-', '/'), '日期')
-    batch_create(base_token, args.daily_table, daily_records)
+        delete_existing_records(base_token, daily_table, day.replace('-', '/'), '日期')
+    batch_create(base_token, daily_table, daily_records)
     # 写入后去重校验
-    check_and_cleanup_duplicates(base_token, args.daily_table, '日期',
+    check_and_cleanup_duplicates(base_token, daily_table, '日期',
                                  dates[0].replace('-', '/'), ['日期'])
 
     # === 写入内容数据(笔记) ===
@@ -447,12 +447,12 @@ def main():
             print(f"    - {n['笔记标题'][:30]}... 曝光={n['曝光']}, 点赞={n['点赞']}")
         # 前置去重：按每篇笔记标题搜索，已存在则先删
         for n in notes:
-            check_and_cleanup_duplicates(base_token, args.content_table, '笔记标题',
+            check_and_cleanup_duplicates(base_token, content_table, '笔记标题',
                                          n['笔记标题'][:10], ['笔记标题', '首次发布时间'])
-        batch_create(base_token, args.content_table, notes)
+        batch_create(base_token, content_table, notes)
         # 写入后去重校验
         for n in notes:
-            check_and_cleanup_duplicates(base_token, args.content_table, '笔记标题',
+            check_and_cleanup_duplicates(base_token, content_table, '笔记标题',
                                          n['笔记标题'][:10], ['笔记标题', '首次发布时间'])
     else:
         print("  ⚠️ 内容分析文件不存在")
