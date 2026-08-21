@@ -105,19 +105,18 @@ def in_date_range(date_str, start_date, end_date):
 def parse_traffic_excel(file_path, start_date, end_date):
     """
     解析 内容分析_流量数据.xls
-    返回: (table1_records, table2_records, table4_records)
+    返回：(table1_records, table2_records, article_keys)
     """
     wb = xlrd.open_workbook(file_path)
     sh = wb.sheet_by_name('New Sheet1')
 
     table1_records = []  # 阅读人数（按渠道）
     table2_records = []  # 账号阅读（汇总）
-    table4_records = []  # 火车票文章
+    article_keys = []    # (日期, 标题) 用于匹配 total 表
 
-    all_channel_reads = {}  # 日期 → "全部"渠道的阅读人数
-
+    # 第一遍：收集表1数据和"全部"渠道的阅读人数
+    all_channel_reads = {}
     for r in range(3, sh.nrows):
-        # --- 表1 & 表2: 数据趋势概况 (cols 1-9) ---
         date_val = sh.cell_value(r, 1)
         channel = sh.cell_value(r, 2)
         read_count = sh.cell_value(r, 3)
@@ -125,18 +124,16 @@ def parse_traffic_excel(file_path, start_date, end_date):
         if date_val and channel:
             date_str = parse_date_str(date_val)
             if date_str and in_date_range(date_str, start_date, end_date):
-                # 表1: 日期 + 渠道 + 阅读人数
                 table1_records.append({
                     '日期': date_str,
                     '渠道': str(channel),
                     '阅读人数': int(read_count) if read_count else 0
                 })
-
-                # 记录"全部"渠道的阅读人数（用于表2）
                 if channel == '全部':
                     all_channel_reads[date_str] = int(read_count) if read_count else 0
 
-        # 表2: cols 5-9 (日期, 分享人数, 跳转阅读原文人数, 微信收藏人数, 发表篇数)
+    # 第二遍：处理表2（此时 all_channel_reads 已完整）
+    for r in range(3, sh.nrows):
         date_val2 = sh.cell_value(r, 5)
         if date_val2:
             date_str2 = parse_date_str(date_val2)
@@ -156,25 +153,7 @@ def parse_traffic_excel(file_path, start_date, end_date):
                     '阅读人数': all_channel_reads.get(date_str2, 0)
                 })
 
-        # --- 表4: 数据来源概况 (cols 11-15) ---
-        spread_channel = sh.cell_value(r, 11)
-        publish_date = sh.cell_value(r, 12)
-        content_title = sh.cell_value(r, 13)
-        article_reads = sh.cell_value(r, 14)
-        read_ratio = sh.cell_value(r, 15)
-
-        if spread_channel == '公众号消息' and publish_date and content_title:
-            pub_date_str = parse_date_str(publish_date)
-            if pub_date_str and in_date_range(pub_date_str, start_date, end_date):
-                table4_records.append({
-                    '内容标题': str(content_title),
-                    '发表时间': pub_date_str.replace('/', '-'),
-                    '总阅读人数': int(article_reads) if article_reads else 0,
-                    '送达阅读率': round(float(read_ratio), 6) if read_ratio else 0
-                })
-
-    # 收集筛选出的文章（日期+标题，用于匹配 total 表）
-    article_keys = []
+    # 第三遍：收集文章标题
     for r in range(3, sh.nrows):
         spread_channel = sh.cell_value(r, 11)
         publish_date = sh.cell_value(r, 12)
@@ -186,8 +165,6 @@ def parse_traffic_excel(file_path, start_date, end_date):
 
     return table1_records, table2_records, article_keys
 
-
-# ========== 表4: 解析 total_xxx.xls（完整文章数据）==========
 
 def is_emoji_start(text):
     """判断文本是否以 emoji 开头"""
@@ -364,40 +341,54 @@ def parse_user_growth_file(file_path, start_date, end_date):
 
 def delete_existing_records(base_token, table_id, date_field, start_date, end_date):
     """删除指定日期范围内的旧数据"""
-    # 搜索该表所有记录
-    result = run_lark([
-        'base', '+record-search',
+    # 将日期转换为 ISO 格式用于 filter
+    start_iso = start_date.replace('/', '-') + 'T00:00:00.000+08:00'
+    end_iso = end_date.replace('/', '-') + 'T23:59:59.000+08:00'
+    
+    # 使用 record-list + filter-json 精确获取该日期范围的记录
+    filter_json = json.dumps({
+        "logic": "and",
+        "conditions": [
+            [date_field, ">", start_date.replace('/', '-') + 'T00:00:00.000+08:00'],
+            [date_field, "<", end_date.replace('/', '-') + 'T23:59:59.000+08:00']
+        ]
+    })
+    
+    result = subprocess.run([
+        'lark-cli', 'base', '+record-list',
         '--base-token', base_token,
         '--table-id', table_id,
         '--as', 'user',
-        '--keyword', '2026',
-        '--search-field', date_field,
-        '--limit', '200'
-    ])
+        '--filter-json', filter_json
+    ], capture_output=True, text=True)
 
-    if not result or 'records' not in result:
-        return 0
+    output = result.stdout
 
-    # 筛选日期范围内的记录
+    # 解析表格格式，提取 record_id
     record_ids = []
-    for rec in result.get('records', []):
-        fields = rec.get('fields', {})
-        date_val = fields.get(date_field, '')
-        if isinstance(date_val, str):
-            # 飞书返回 ISO 格式: 2026-08-14T00:00:00.000+08:00
-            date_part = date_val[:10].replace('-', '/')
-            if in_date_range(date_part, start_date, end_date):
-                record_ids.append(rec['record_id'])
+    for line in output.split('\n'):
+        if line.startswith('| rec'):
+            parts = line.split('|')
+            if len(parts) >= 2:
+                rec_id = parts[1].strip()
+                if rec_id.startswith('rec'):
+                    record_ids.append(rec_id)
 
     if record_ids:
-        run_lark([
-            'base', '+record-delete',
-            '--base-token', base_token,
-            '--table-id', table_id,
-            '--as', 'user',
-            '--yes'
-        ], json_body={"record_id_list": record_ids})
+        # 分批删除（每批最多 100 条）
+        batch_size = 100
+        for i in range(0, len(record_ids), batch_size):
+            batch = record_ids[i:i+batch_size]
+            run_lark([
+                'base', '+record-delete',
+                '--base-token', base_token,
+                '--table-id', table_id,
+                '--as', 'user',
+                '--yes'
+            ], json_body={"record_id_list": batch})
         print(f'  删除了 {len(record_ids)} 条旧数据')
+    else:
+        print(f'  无需删除旧数据')
 
     return len(record_ids)
 
@@ -458,7 +449,7 @@ def main():
         return
 
     print('\n📊 [1] 解析 内容分析_流量数据.xls...')
-    table1_records, table2_records, article_titles = parse_traffic_excel(
+    table1_records, table2_records, article_keys = parse_traffic_excel(
         traffic_file, start_date, end_date)
     print(f'  表1（阅读人数）: {len(table1_records)} 条记录')
     print(f'  表2（账号阅读）: {len(table2_records)} 条记录')
