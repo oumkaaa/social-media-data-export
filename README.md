@@ -138,6 +138,48 @@ python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py \
 
 详见 SKILL.md 中的完整工作流说明。
 
+
+
+## 📱 微信公众号多账号配置
+
+### Chrome Profile 设置
+
+1. **创建 Chrome Profile**：
+   - 打开 Chrome 浏览器
+   - 点击右上角头像 → 添加
+   - 为每个公众号账号创建独立的 Profile（如：test1、test2）
+
+2. **登录账号**：
+   - 在每个 Profile 中分别登录对应的微信公众号账号
+   - 保持登录态，后续脚本会自动使用
+
+3. **获取 Profile 路径**：
+   ```bash
+   ls ~/Library/Application\ Support/Google/Chrome/ | grep Profile
+   ```
+   通常为 `Profile 1`、`Profile 2` 等
+
+### 账号配置
+
+编辑 `scripts/export_data.py` 中的 `WECHAT_ACCOUNTS` 配置，为每个账号添加：
+- **name**: 账号名称
+- **token**: 从登录后的 URL 中提取
+- **chrome_profile**: Chrome Profile 名称（如 `Profile 1`）
+- **base_token**: 飞书多维表格 Base Token
+- **tables**: 对应的三个表格 ID（阅读人数、账号阅读、账号涨粉）
+
+### 执行
+
+```bash
+# 导出所有微信公众号账号
+python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py --channels wechat
+
+# 导出所有平台
+python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py
+```
+
+脚本会依次使用不同的 Chrome Profile 登录各个账号，自动下载数据并写入对应的飞书多维表格。
+
 ## 🔧 依赖要求
 
 - **Python 3.7+**

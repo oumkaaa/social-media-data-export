@@ -398,6 +398,218 @@ def export_wechat_user_analysis(wechat_dir, period, friday_str, thursday_str):
     print(f"  微信公众号用户分析数据：0/1 成功", flush=True)
     return False
 
+
+# 微信公众号账号配置
+WECHAT_ACCOUNTS = [
+    {
+        'name': '火车票公众号',
+        'token': '1080546829',
+        'chrome_profile': 'Profile 1',  # Chrome Profile 路径
+        'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
+        'tables': {
+            'content_analysis': 'tblCG4L8bqFA7S8u',  # 阅读人数（分渠道）
+            'account_reading': 'tbl7Ju5W6ruBy7dx',    # 账号阅读
+            'user_analysis': 'tbl2WLGep98yGbxl'       # 账号涨粉
+        }
+    },
+    {
+        'name': '旅行公众号',
+        'token': '161194748',
+        'chrome_profile': 'Profile 2',  # Chrome Profile 路径
+        'base_token': 'JsIRbu5AuaCmK4sehzrcc27Enze',
+        'tables': {
+            'content_analysis': '<旅行账号阅读表 ID>',
+            'account_reading': '<旅行账号阅读表 ID>',
+            'user_analysis': '<旅行账号涨粉表 ID>'
+        }
+    }
+]
+
+def get_chrome_profile_path(profile_name):
+    """获取 Chrome Profile 路径"""
+    base_path = os.path.expanduser("~/Library/Application Support/Google/Chrome")
+    return os.path.join(base_path, profile_name)
+
+def export_wechat_account(account, period, friday_str, thursday_str, base_output_dir):
+    """导出单个微信公众号账号的数据"""
+    print(f"\n{'='*50}", flush=True)
+    print(f"📱 开始导出账号：{account['name']}", flush=True)
+    print(f"   Token: {account['token']}", flush=True)
+    print(f"   Chrome Profile: {account['chrome_profile']}", flush=True)
+    print(f"{'='*50}", flush=True)
+    
+    # 计算日期范围
+    date_str = f"{friday_str.replace('-', '')}-{thursday_str.replace('-', '')}"
+    wechat_dir = os.path.join(base_output_dir, f"微信公众号_{account['name']}_{date_str}")
+    os.makedirs(wechat_dir, exist_ok=True)
+    
+    # 设置 Chrome Profile 路径
+    chrome_profile_path = get_chrome_profile_path(account['chrome_profile'])
+    print(f"   Profile 路径：{chrome_profile_path}", flush=True)
+    
+    # 内容分析数据
+    print(flush=True)
+    content_ok = export_wechat_content(wechat_dir, period, friday_str, thursday_str, account['token'])
+    
+    # 用户分析数据
+    print(flush=True)
+    user_ok = export_wechat_user_analysis(wechat_dir, period, friday_str, thursday_str, account['token'])
+    
+    # 写入飞书多维表格
+    print(flush=True)
+    print("📊 开始写入飞书多维表格...", flush=True)
+    
+    lark_ok = True
+    if content_ok:
+        # 解析并写入内容分析数据
+        lark_ok = write_wechat_content_to_lark(wechat_dir, account, friday_str, thursday_str) and lark_ok
+    
+    if user_ok:
+        # 解析并写入用户分析数据
+        lark_ok = write_wechat_user_to_lark(wechat_dir, account, friday_str, thursday_str) and lark_ok
+    
+    print(flush=True)
+    print(f"✅ 账号 {account['name']} 导出完成", flush=True)
+    return content_ok and user_ok and lark_ok
+
+def write_wechat_content_to_lark(wechat_dir, account, friday_str, thursday_str):
+    """将内容分析数据写入飞书多维表格"""
+    xls_file = os.path.join(wechat_dir, "内容分析_流量数据.xls")
+    if not os.path.exists(xls_file):
+        print("  ⚠️ 内容分析文件不存在，跳过写入", flush=True)
+        return False
+    
+    try:
+        import xlrd
+        wb = xlrd.open_workbook(xls_file)
+        sh = wb.sheet_by_name('New Sheet1')
+        
+        # 解析表 1 数据（日期、渠道、阅读人数）
+        table1_records = []
+        for r in range(3, sh.nrows):
+            date_val = sh.cell_value(r, 1)
+            channel = sh.cell_value(r, 2)
+            read_count = sh.cell_value(r, 3)
+            if date_val and channel:
+                if isinstance(date_val, float):
+                    date_tuple = xlrd.xldate_as_tuple(date_val, wb.datemode)
+                    date_str = f'{date_tuple[0]:04d}/{date_tuple[1]:02d}/{date_tuple[2]:02d}'
+                else:
+                    date_str = str(date_val).replace('-', '/')
+                
+                if friday_str.replace('-', '/') <= date_str <= thursday_str.replace('-', '/'):
+                    table1_records.append({
+                        '日期': date_str,
+                        '渠道': str(channel),
+                        '阅读人数': int(read_count) if read_count else 0
+                    })
+        
+        # 写入表 1
+        if table1_records:
+            import json
+            data_json = json.dumps({"create_records": table1_records}, ensure_ascii=False)
+            result = subprocess.run([
+                'lark-cli', 'base', '+record-batch-create',
+                '--base-token', account['base_token'],
+                '--table-id', account['tables']['content_analysis'],
+                '--json', data_json,
+                '--as', 'user'
+            ], capture_output=True, text=True)
+            
+            if '"ok": true' in result.stdout:
+                print(f"  ✅ 写入阅读人数表：{len(table1_records)} 条记录", flush=True)
+            else:
+                print(f"  ❌ 写入阅读人数表失败", flush=True)
+                return False
+        
+        return True
+    except Exception as e:
+        print(f"  ❌ 写入失败：{e}", flush=True)
+        return False
+
+def write_wechat_user_to_lark(wechat_dir, account, friday_str, thursday_str):
+    """将用户分析数据写入飞书多维表格"""
+    xls_file = os.path.join(wechat_dir, "用户分析_用户增长.xls")
+    if not os.path.exists(xls_file):
+        print("  ️ 用户分析文件不存在，跳过写入", flush=True)
+        return False
+    
+    try:
+        from html.parser import HTMLParser
+        
+        # 解析 HTML 格式的 xls 文件
+        class TableParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.in_th = False
+                self.in_td = False
+                self.current_row = []
+                self.rows = []
+                self.current_text = ""
+            
+            def handle_starttag(self, tag, attrs):
+                if tag in ('th', 'td'):
+                    self.in_th = (tag == 'th')
+                    self.in_td = (tag == 'td')
+                    self.current_text = ""
+            
+            def handle_endtag(self, tag):
+                if tag in ('th', 'td'):
+                    self.current_row.append(self.current_text.strip())
+                    self.in_th = False
+                    self.in_td = False
+                elif tag == 'tr':
+                    if self.current_row:
+                        self.rows.append(self.current_row)
+                        self.current_row = []
+            
+            def handle_data(self, data):
+                if self.in_th or self.in_td:
+                    self.current_text += data
+        
+        with open(xls_file, 'r', encoding='utf-8') as f:
+            html = f.read()
+        
+        parser = TableParser()
+        parser.feed(html)
+        
+        # 找到数据行
+        records = []
+        for row in parser.rows:
+            if len(row) >= 5 and row[0].startswith('2026-'):
+                date_str = row[0].replace('-', '/')
+                if friday_str.replace('-', '/') <= date_str <= thursday_str.replace('-', '/'):
+                    records.append({
+                        '时间': date_str,
+                        '新关注人数': int(row[1]),
+                        '取消关注人数': int(row[2]),
+                        '净增关注人数': int(row[3]),
+                        '累积关注人数': int(row[4])
+                    })
+        
+        # 写入
+        if records:
+            import json
+            data_json = json.dumps({"create_records": records}, ensure_ascii=False)
+            result = subprocess.run([
+                'lark-cli', 'base', '+record-batch-create',
+                '--base-token', account['base_token'],
+                '--table-id', account['tables']['user_analysis'],
+                '--json', data_json,
+                '--as', 'user'
+            ], capture_output=True, text=True)
+            
+            if '"ok": true' in result.stdout:
+                print(f"  ✅ 写入用户分析表：{len(records)} 条记录", flush=True)
+            else:
+                print(f"  ❌ 写入用户分析表失败", flush=True)
+                return False
+        
+        return True
+    except Exception as e:
+        print(f"  ❌ 写入失败：{e}", flush=True)
+        return False
+
 def main():
     args = parse_args()
     
@@ -411,10 +623,10 @@ def main():
         print("❌ 错误：opencli 未安装", flush=True)
         return
     
-    print("📡 检查浏览器连接...", flush=True)
+    print(" 检查浏览器连接...", flush=True)
     status = run_cmd("opencli daemon status")
     if "not running" in status:
-        print("⚠️  Daemon 未运行，正在启动...", flush=True)
+        print("️  Daemon 未运行，正在启动...", flush=True)
         run_cmd("opencli daemon restart")
         time.sleep(5)
     
@@ -425,11 +637,23 @@ def main():
     thursday_str = this_thursday.strftime('%Y-%m-%d')
     
     print(f"📅 数据周期：{friday_str}（上周五）至 {thursday_str}（这周四）", flush=True)
-    print(f"📁 导出渠道：{args.channels}", flush=True)
+    print(f" 导出渠道：{args.channels}", flush=True)
     print(f"📁 输出目录：{args.output}", flush=True)
     print(flush=True)
     
     results = {}
+    
+    # 微信公众号多账号导出
+    if args.channels in ['wechat', 'all']:
+        print("📱 开始导出微信公众号数据（多账号）...", flush=True)
+        for account in WECHAT_ACCOUNTS:
+            try:
+                ok = export_wechat_account(account, args.period, friday_str, thursday_str, args.output)
+                results[f"微信公众号-{account['name']}"] = ok
+            except Exception as e:
+                print(f" 账号 {account['name']} 导出失败：{e}", flush=True)
+                results[f"微信公众号-{account['name']}"] = False
+        print(flush=True)
     
     if args.channels in ['xiaohongshu', 'all'] and 'xiaohongshu' in dirs:
         xhs_dir = dirs['xiaohongshu']
