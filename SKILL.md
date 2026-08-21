@@ -244,10 +244,18 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 - **文件格式**: xls（旧版 Excel 格式）
 - **数据周期**: 上周五 → 这周四（增量数据）
 
-### 目标表格
-**Base Token**: `JsIRbu5AuaCmK4sehzrcc27Enze`
+### 目标表格（由用户提供）
 
-#### 表 1 - 阅读人数 (`tblCG4L8bqFA7S8u`)
+运行脚本时，会提示用户输入以下信息：
+
+1. **Base Token**：从飞书多维表格 URL 中提取
+   - URL 格式：`https://trip.larkenterprise.com/base/<BASE_TOKEN>?table=<TABLE_ID>&view=<VIEW_ID>`
+   
+2. **表 1 ID**：阅读人数表的 ID（以 `tbl` 开头）
+
+3. **表 2 ID**：账号阅读表的 ID（以 `tbl` 开头）
+
+#### 表 1 - 阅读人数（字段要求）
 **字段**:
 - `日期` (datetime): 格式 `yyyy/MM/dd`
 - `渠道` (text): 公众号消息、聊天会话、朋友圈、公众号主页、其他、推荐、搜一搜、全部
@@ -255,7 +263,7 @@ python3 /Users/wangwenjia/.codex/skills/social-media-data-export/scripts/export_
 
 **数据量**: 9 天 × 8 渠道 = 72 条记录
 
-#### 表 2 - 账号阅读 (`tbl7Ju5W6ruBy7dx`)
+#### 表 2 - 账号阅读（字段要求）
 **字段**:
 - `日期` (datetime): 格式 `yyyy/MM/dd`
 - `分享人数` (number): 整数
@@ -287,8 +295,8 @@ sh = wb.sheet_by_name('New Sheet1')
 ```bash
 # 搜索 8/5 之前的数据
 lark-cli base +record-search \
-  --base-token JsIRbu5AuaCmK4sehzrcc27Enze \
-  --table-id tblCG4L8bqFA7S8u \
+  --base-token <BASE_TOKEN> \
+  --table-id <TABLE1_ID> \
   --as user \
   --keyword "公众号" \
   --search-field "渠道" \
@@ -297,8 +305,8 @@ lark-cli base +record-search \
 
 # 删除旧数据
 lark-cli base +record-delete \
-  --base-token JsIRbu5AuaCmK4sehzrcc27Enze \
-  --table-id tblCG4L8bqFA7S8u \
+  --base-token <BASE_TOKEN> \
+  --table-id <TABLE1_ID> \
   --json '{"record_id_list": [...]}' \
   --as user \
   --yes
@@ -308,15 +316,15 @@ lark-cli base +record-delete \
 ```bash
 # 批量创建表 1
 lark-cli base +record-batch-create \
-  --base-token JsIRbu5AuaCmK4sehzrcc27Enze \
-  --table-id tblCG4L8bqFA7S8u \
+  --base-token <BASE_TOKEN> \
+  --table-id <TABLE1_ID> \
   --json '{"create_records": [...]}' \
   --as user
 
 # 批量创建表 2
 lark-cli base +record-batch-create \
-  --base-token JsIRbu5AuaCmK4sehzrcc27Enze \
-  --table-id tbl7Ju5W6ruBy7dx \
+  --base-token <BASE_TOKEN> \
+  --table-id <TABLE2_ID> \
   --json '{"create_records": [...]}' \
   --as user
 ```
@@ -325,8 +333,8 @@ lark-cli base +record-batch-create \
 ```bash
 # 检查表 1 数据量（应为 72 条）
 lark-cli base +record-search \
-  --base-token JsIRbu5AuaCmK4sehzrcc27Enze \
-  --table-id tblCG4L8bqFA7S8u \
+  --base-token <BASE_TOKEN> \
+  --table-id <TABLE1_ID> \
   --as user \
   --keyword "全部" \
   --search-field "渠道" \
@@ -335,8 +343,8 @@ lark-cli base +record-search \
 
 # 检查表 2 数据量（应为 9 条）
 lark-cli base +record-search \
-  --base-token JsIRbu5AuaCmK4sehzrcc27Enze \
-  --table-id tbl7Ju5W6ruBy7dx \
+  --base-token <BASE_TOKEN> \
+  --table-id <TABLE2_ID> \
   --as user \
   --keyword "2026" \
   --search-field "日期" \
@@ -365,9 +373,9 @@ import json
 import subprocess
 from datetime import datetime, timedelta
 
-BASE_TOKEN = "JsIRbu5AuaCmK4sehzrcc27Enze"
-TABLE1_ID = "tblCG4L8bqFA7S8u"  # 阅读人数
-TABLE2_ID = "tbl7Ju5W6ruBy7dx"  # 账号阅读
+BASE_TOKEN = "<用户提供的 Base Token>"
+TABLE1_ID = "<用户提供的表 1 ID>"  # 阅读人数
+TABLE2_ID = "<用户提供的表 2 ID>"  # 账号阅读
 
 def calculate_date_range():
     """计算上周五 → 这周四的日期范围"""
