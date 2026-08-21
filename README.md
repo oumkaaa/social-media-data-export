@@ -1,16 +1,17 @@
 # 📊 社交媒体数据导出 Skill
 
-> 自动化从社交媒体平台创作者中心导出运营数据，支持小红书和抖音。
+> 自动化从社交媒体平台创作者中心导出运营数据，支持小红书、抖音和微信公众号。
 
 ## ✨ 功能特性
 
-- **多平台支持**：小红书、抖音
+- **多平台支持**：小红书、抖音、微信公众号
 - **自动化导出**：自动登录验证、页面导航、Tab 切换、日期设置、点击下载
 - **智能组织**：按平台 + 日期范围自动创建文件夹
 - **灵活配置**：支持渠道选择、日期范围、自定义输出目录
 - **实时反馈**：导出过程实时显示进度
+- **飞书集成**：支持将微信公众号数据自动写入飞书多维表格
 
-## 📦 安装
+##  安装
 
 ### 方式 1：Codex Skill 安装（推荐）
 
@@ -36,8 +37,8 @@ ls ~/.codex/skills/social-media-data-export/
 
 ### 在 Codex 中使用
 
-1. **触发 Skill**：在 Codex 中说"导出数据"、"小红书数据"、"抖音数据"等关键词
-2. **登录验证**：根据提示完成小红书/抖音登录
+1. **触发 Skill**：在 Codex 中说"导出数据"、"小红书数据"、"抖音数据"、"微信公众号数据"等关键词
+2. **登录验证**：根据提示完成小红书/抖音/微信公众号登录
 3. **表单配置**：通过表单选择渠道和日期范围
 4. **自动执行**：Codex 自动运行脚本并交付文件
 
@@ -53,6 +54,9 @@ python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py --channe
 # 仅抖音 + 上周
 python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py --channels douyin --period last-week
 
+# 仅微信公众号
+python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py --channels wechat
+
 # 自定义日期 + 自定义输出目录
 python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py \
   --period custom \
@@ -65,7 +69,7 @@ python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py \
 
 | 参数 | 说明 | 选项 | 默认值 |
 |------|------|------|--------|
-| `--channels` | 导出渠道 | `xiaohongshu`, `douyin`, `all` | `all` |
+| `--channels` | 导出渠道 | `xiaohongshu`, `douyin`, `wechat`, `all` | `all` |
 | `--period` | 日期范围 | `this-week`, `last-week`, `custom` | `this-week` |
 | `--start` | 自定义开始日期 | YYYY-MM-DD | - |
 | `--end` | 自定义结束日期 | YYYY-MM-DD | - |
@@ -81,9 +85,11 @@ python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py \
 │   ├── 涨粉数据.xlsx
 │   ├── 发布数据.xlsx
 │   └── 内容分析_笔记明细.xlsx
-└── 抖音_20260807-0813/
-    ├── 作品数据.xlsx
-    └── 粉丝数据.xlsx
+├── 抖音_20260807-0813/
+│   ├── 作品数据.xlsx
+│   └── 粉丝数据.xlsx
+└── 微信公众号_20260807-0813/
+    └── 内容分析_流量数据.xls
 ```
 
 **文件说明**：
@@ -97,6 +103,7 @@ python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py \
 | 小红书 | 内容分析_笔记明细.xlsx | 笔记级别详细数据 |
 | 抖音 | 作品数据.xlsx | 播放量、点赞、评论、分享等 |
 | 抖音 | 粉丝数据.xlsx | 粉丝总量、净增、脱粉等 |
+| 微信公众号 | 内容分析_流量数据.xls | 阅读人数、分享人数、收藏人数、群发篇数等 |
 
 ## ✅ 验收标准
 
@@ -105,23 +112,36 @@ python3 ~/.codex/skills/social-media-data-export/scripts/export_data.py \
 1. **文件夹结构**：
    - `~/Documents/社交媒体数据/小红书_YYYYMMDD-MMDD/`
    - `~/Documents/社交媒体数据/抖音_YYYYMMDD-MMDD/`
+   - `~/Documents/社交媒体数据/微信公众号_YYYYMMDD-MMDD/`
 
 2. **文件完整性**：
    - 小红书账号概览：5 个文件（观看/互动/涨粉/发布/内容分析）
    - 抖音：2 个文件（作品数据/粉丝数据）
+   - 微信公众号：1 个文件（内容分析_流量数据）
 
 3. **数据有效性**：
-   - 所有 xlsx 文件大小 > 0
+   - 所有文件大小 > 0
    - 打开文件确认包含实际数据（非空表）
 
 4. **日期范围**：
    - 文件名中的日期与用户选择的周期一致
+
+##  飞书多维表格集成
+
+微信公众号数据支持自动写入飞书多维表格：
+
+- **Base Token**: `JsIRbu5AuaCmK4sehzrcc27Enze`
+- **表 1 - 阅读人数** (`tblCG4L8bqFA7S8u`)：72 条记录（9 天 × 8 渠道）
+- **表 2 - 账号阅读** (`tbl7Ju5W6ruBy7dx`)：9 条记录（9 天，含阅读/分享/收藏/群发数据）
+
+详见 SKILL.md 中的完整工作流说明。
 
 ## 🔧 依赖要求
 
 - **Python 3.7+**
 - **opencli**：浏览器自动化工具
 - **Chrome 浏览器**：需要安装 opencli Browser Bridge 扩展
+- **xlrd**：读取 xls 格式文件（微信公众号数据）
 
 ### 安装 opencli
 
@@ -135,6 +155,12 @@ npm install -g @jackwener/opencli
 2. 访问 [opencli Browser Bridge](https://chrome.google.com/webstore/detail/opencli-browser-bridge/...)
 3. 安装扩展并授权
 
+### 安装 Python 依赖
+
+```bash
+pip3 install xlrd
+```
+
 ## 🐛 故障排查
 
 | 问题 | 原因 | 解决方案 |
@@ -144,6 +170,7 @@ npm install -g @jackwener/opencli
 | 下载文件未出现 | 等待时间不足 | 增加 sleep 时间到 10 秒 |
 | 内容分析数据错误 | 页面未正确加载 | 确认 URL 和左侧栏选中状态 |
 | 抖音按钮找不到 | 微前端容器 ID 动态变化 | 实时获取容器 ID |
+| 微信公众号下载失败 | 日期选择器未正确设置 | 点击"最近 7 天"快捷按钮 |
 
 ## 📝 示例输出
 
@@ -154,7 +181,7 @@ npm install -g @jackwener/opencli
 
 📡 检查浏览器连接...
 📅 数据周期：2026-08-07（上周五）至 2026-08-13（这周四）
-📁 导出渠道：all
+ 导出渠道：all
 📁 输出目录：/Users/wangwenjia/Documents/社交媒体数据
 
  开始导出小红书 - 账号概览数据...
@@ -177,6 +204,10 @@ npm install -g @jackwener/opencli
   → 导出粉丝数据...
     ✅ 已保存：粉丝数据.xlsx
 
+📱 开始导出微信公众号 - 内容分析数据...
+  → 设置日期范围：最近 7 天
+    ✅ 已保存：内容分析_流量数据.xls
+
 ==================================================
 ✅ 数据导出完成！
 ==================================================
@@ -194,6 +225,9 @@ npm install -g @jackwener/opencli
   - 作品数据.xlsx
   - 粉丝数据.xlsx
 
+【微信公众号_20260807-0813】
+  - 内容分析_流量数据.xls
+
 📅 数据周期：2026-08-07（上周五）至 2026-08-13（这周四）
 📂 保存位置：/Users/wangwenjia/Documents/社交媒体数据
 ```
@@ -202,7 +236,7 @@ npm install -g @jackwener/opencli
 
 欢迎提交 Issue 和 Pull Request！
 
-## 📄 许可证
+##  许可证
 
 MIT License
 
