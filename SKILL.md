@@ -359,6 +359,60 @@ python3 <skill_dir>/scripts/write_xhs_to_lark.py \
 | 内容分析数据错误 | 页面未正确加载 | 确认 URL 和左侧栏选中状态 |
 | 抖音按钮找不到 | 微前端容器 ID 动态变化 | 实时获取容器 ID |
 
+## Table ID 配置管理
+
+当用户提供新的飞书多维表格链接时，使用辅助脚本自动提取 base_token 和 table_id 并更新配置。
+
+### 使用场景
+
+- 用户首次配置账号的表格映射
+- 用户更换了多维表格，需要更新 table_id
+- 新增账号或新增表格类型
+
+### 使用方法
+
+```bash
+python3 scripts/update_mapping.py \
+  --account "账号名称" \
+  --field "字段名" \
+  --url "飞书多维表格URL"
+```
+
+### 参数说明
+
+- `--account`: 账号名称（如：火车票小红书、火车票公众号）
+- `--field`: 字段名，根据平台和表格类型选择：
+  - 小红书：`daily_table`（账号数据）、`content_table`（内容数据）、`weekly_table`（周数据）、`monthly_table`（月数据）
+  - 微信公众号：`content_analysis_table`（内容分析）、`account_read_table`（账号阅读）、`user_analysis_table`（用户分析）
+- `--url`: 飞书多维表格的完整 URL
+
+### 示例
+
+```bash
+# 更新火车票小红书的账号数据表
+python3 scripts/update_mapping.py \
+  --account "火车票小红书" \
+  --field "daily_table" \
+  --url "https://trip.larkenterprise.com/base/JsIRbu5AuaCmK4sehzrcc27Enze?table=tblaHFlqebt9Wwgy&view=vewKB6LFJT"
+
+# 更新火车票公众号的内容分析表
+python3 scripts/update_mapping.py \
+  --account "火车票公众号" \
+  --field "content_analysis_table" \
+  --url "https://trip.larkenterprise.com/base/JsIRbu5AuaCmK4sehzrcc27Enze?table=tblCG4L8bqFA7S8u&view=xxx"
+```
+
+### AI 职责
+
+当用户提供飞书链接时：
+1. 询问用户这个表格属于哪个账号
+2. 询问用户这个表格的用途（账号数据/内容数据/阅读人数等）
+3. 根据答案确定 `--account` 和 `--field` 参数
+4. 运行 `update_mapping.py` 脚本更新配置
+5. 确认更新成功
+
+---
+
 ## 相关文件
 
 - 导出脚本：`scripts/export_data.py`（含 Chrome Profile 切换 + whoami 校验）
@@ -688,7 +742,61 @@ if __name__ == '__main__':
     main()
 ```
 
-### 相关文件
+### Table ID 配置管理
+
+当用户提供新的飞书多维表格链接时，使用辅助脚本自动提取 base_token 和 table_id 并更新配置。
+
+### 使用场景
+
+- 用户首次配置账号的表格映射
+- 用户更换了多维表格，需要更新 table_id
+- 新增账号或新增表格类型
+
+### 使用方法
+
+```bash
+python3 scripts/update_mapping.py \
+  --account "账号名称" \
+  --field "字段名" \
+  --url "飞书多维表格URL"
+```
+
+### 参数说明
+
+- `--account`: 账号名称（如：火车票小红书、火车票公众号）
+- `--field`: 字段名，根据平台和表格类型选择：
+  - 小红书：`daily_table`（账号数据）、`content_table`（内容数据）、`weekly_table`（周数据）、`monthly_table`（月数据）
+  - 微信公众号：`content_analysis_table`（内容分析）、`account_read_table`（账号阅读）、`user_analysis_table`（用户分析）
+- `--url`: 飞书多维表格的完整 URL
+
+### 示例
+
+```bash
+# 更新火车票小红书的账号数据表
+python3 scripts/update_mapping.py \
+  --account "火车票小红书" \
+  --field "daily_table" \
+  --url "https://trip.larkenterprise.com/base/JsIRbu5AuaCmK4sehzrcc27Enze?table=tblaHFlqebt9Wwgy&view=vewKB6LFJT"
+
+# 更新火车票公众号的内容分析表
+python3 scripts/update_mapping.py \
+  --account "火车票公众号" \
+  --field "content_analysis_table" \
+  --url "https://trip.larkenterprise.com/base/JsIRbu5AuaCmK4sehzrcc27Enze?table=tblCG4L8bqFA7S8u&view=xxx"
+```
+
+### AI 职责
+
+当用户提供飞书链接时：
+1. 询问用户这个表格属于哪个账号
+2. 询问用户这个表格的用途（账号数据/内容数据/阅读人数等）
+3. 根据答案确定 `--account` 和 `--field` 参数
+4. 运行 `update_mapping.py` 脚本更新配置
+5. 确认更新成功
+
+---
+
+## 相关文件
 
 - 导出脚本：`scripts/export_data.py`
 - 飞书写入脚本：`scripts/write_to_lark_base.py`（待创建）
